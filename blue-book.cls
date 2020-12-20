@@ -21,7 +21,7 @@
 %    Declaration of options   
 % ----------------------------------
 
-\DeclareOption*{\PassOptionsToClass{\CurrentOption}{dream-note}}
+\DeclareOption*{\PassOptionsToClass{\CurrentOption}{a-and-v-note}}
 
 % ----------------------------------
 %    Execution of options   
@@ -33,7 +33,7 @@
 %    Package Loading   
 % ----------------------------------
 
-\LoadClass{dream-note}
+\LoadClass{a-and-v-note}
 
 
 % ----------------------------------

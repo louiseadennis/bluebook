@@ -1,0 +1,48 @@
+\usepackage{amsmath}
+
+\newcommand{\gwendolen}{{\sc Gwendolen}}
+
+\newcommand{\INThddeed}{\ensuremath{\mathit{\AILhd_d}}}
+\newcommand{\INThdunifier}[1]{\ensuremath{\AILunifier^{\AILhd(#1)}}}
+\newcommand{\INTtl}{\ensuremath{\AILtl_i}}
+\newcommand{\INTcons}{\ensuremath{\AILcons_p}}
+\newcommand{\INTmergeunifier}{\ensuremath{{\tt U}_{\AILunifier}}}
+\newcommand{\INThdevent}{\ensuremath{\AILhd_e}}
+\newcommand{\INTnew}{\ensuremath{{\tt new}}}
+
+\newcommand{\AILagent}{\ensuremath{\mathit{ag}}}
+\newcommand{\AILbelief}{\ensuremath{\mathit{b}}}
+\newcommand{\AILbeliefbase}{\ensuremath{\mathit{B}}}
+\newcommand{\AILunifier}{\ensuremath{\theta}}
+\newcommand{\AILhd}{\ensuremath{{\tt hd}}}
+\newcommand{\AILcons}{\ensuremath{{\tt ;}}}
+\newcommand{\AILtl}{\ensuremath{{\tt tl}}}
+\newcommand{\AILintention}{\ensuremath{\mathit{i}}}
+\newcommand{\AILaction}{\ensuremath{\mathit{a}}}
+\newcommand{\AILgoal}{\ensuremath{\mathit{g}}}
+\newcommand{\AILgoaltype}{\ensuremath{\mathit{\tau_{\AILgoal}}}}
+\newcommand{\AILdo}{\ensuremath{\mathrm{\mathbf{do}}}}
+\newcommand{\AILmessage}{\ensuremath{\mathit{m}}}
+\newcommand{\AILnpy}{\ensuremath{\epsilon}}
+\newcommand{\AILprobgoal}[2]{\ensuremath{\mathit{\mathtt{x}!_{#1}#2}}}
+\newcommand{\AILwaitfor}[1]{\ensuremath{*\ldots{#1}}}
+\newcommand{\AILsuspended}{\bf is\_suspended}
+\newcommand{\AILintset}{\ensuremath{\mathit{I}}}
+\newcommand{\AILsuspend}{{\tt suspend}}
+\newcommand{\AILunsuspend}{\bf unsuspend}
+\newcommand{\AILadd}[1]{\ensuremath{\mathit{+#1}}}
+\newcommand{\AILevent}{\ensuremath{\mathit{e}}}
+\newcommand{\AILdeed}{\ensuremath{\mathit{d}}}
+
+\newcommand{\sentmessage}[2]{\ensuremath{\mathit{\uparrow^{#1}#2}}}
+
+\newcommand{\inlinecode}[1]{\mbox{\texttt{#1}}}
+
+\newenvironment{stacksed}{
+\begin{tabular}{l|l} 
+\hline
+event & deed  \\ 
+\hline \hline} {
+\cr \hline 
+\end{tabular}
+}
