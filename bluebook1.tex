@@ -174,7 +174,7 @@ The new proposal is that actions should be paired with a success, failure and ab
 This is where the diagram about goal life cycles came in which we adapted (I think,  looking at our scrawl) to be something like:
 
 \begin{center}
-\includegraphics[width=3in]{lifecycle.jpg}
+\includegraphics[width=3in]{images/lifecycle.jpg}
 \end{center}
 
 A goal that is \emph{Pending} is a goal on the top of an intention paired with a ``no plan yet'' deed ($\AILnpy$) which we discussed in Section~\ref{sec:intentions}.  When the intention is selected and a plan is applied to the goal, expanding the intention, it becomes \emph{Active}.  When the top deed is an action then the whole intention is suspended, and this is what we mean by the Goal being \emph{Suspended} in the lifecycle.  If the action completes with sucess then the intention becomes active again and continues processing (like in the existing Wait For case).  \emph{However} if the goal fails or aborts then we drop everything to do with the current plan and go back to the pending state.  We don't really distinguish between failures and aborts -- the distinction might be useful for diagnosis, but doesn't make much difference to goal processing.
