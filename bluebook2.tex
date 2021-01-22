@@ -1,0 +1,265 @@
+\documentclass{blue-book}
+\NoteNumber{2}
+
+\usepackage{graphicx}
+\usepackage{amssymb,amsmath}
+
+\let\sometime=\lozenge
+\let\always=\Box
+
+\title{Trying to Use the Compositional Framework}
+
+\begin{document}
+\maketitle
+I'm trying to use our compositional framework to deduce some system properties and I'm grappling with a couple of things.  This has resulted in a couple of suggestions for changes to the framework, though I'd also be grateful if someone could check my working here!!
+
+\section{Three Modules}
+I'm working with a variant of our original example where a robot has to plot an obstacle free path to a goal while accounting for battery level.   I've simplified it somewhat to focus on the bits that are of interest.  I have the following three modules:
+
+\begin{description}
+\item[Goal Selection] Picks a target location based on a heat-map and whether a recharge is needed.
+\item[Planning] Plans a route to the target location
+\item[Plan Execution] Executes the plan if there is enough battery power, otherwise it requests a recharge from goal selection
+\end{description}
+
+I'm aiming to prove a property along the lines of:
+\begin{quote}
+If there is not enough battery power for the current plan then eventually the goal will be the charging position and a plan to go there will be executed.
+\end{quote}
+
+\section{Updating Module Contracts}
+
+At the moment in our framework, a contract for a Module, $M$, consists of four components
+\begin{description}
+\item[Inputs, $\overline{i_M}$] A signature of symbols/signals that are input to the module
+\item[Outputs, $\overline{o_M}$] A signature of symbols/signals output by the module
+\item[Assume, $\mathcal{A}_M(\overline{i_M})$] A logical formula over the inputs
+\item[Guarantee, $\mathcal{G}_M(\overline{o_M})$] A logical formula over the outputs.
+\end{description}
+Informally this says that when the module receives an input, if the Assume holds then it will eventually produce an output for which the Guarantee holds.
+
+We seem to have rapidly got to a situation where all our modules include their input signature in their output signature.  I'd like instead to have a signature, $\Sigma$, of all symbols in the system and then represent modules as:
+\begin{description}
+\item[Inputs, $\overline{i_M}$] A list of signals that input into this module.
+\item[Fluents, $\overline{f_M}$] Symbols/signals whose value may change during execution of the module: $\overline{f_M} \subseteq \Sigma$
+\item[Assume, $\mathcal{A}_M$] A logical formula over $\Sigma$.
+\item[Guarantee, $\mathcal{G}_M$] A logical formula over $\Sigma$.
+\end{description}
+
+We then had a calculus for combining inference over modules, but I've found in my proofs I keep needing slight adaptations/extensions of it.  
+
+First, I added explicitly the concept of input and output signals that are implicit in the current calculas:  $M^{\uparrow}$ and $M^{\downarrow}$ where $M^{\uparrow}$ means $M$ receives an input and $M^{\downarrow}$ means $M$ emits an output.  To be honest I think we'll need concepts like these anyway to extend the framework to handle streams of inputs and so on.  
+
+The first rule I'm introducing is a formalisation of what a contract means.  I've called this the {\bf Contract Rule}:
+
+\begin{equation}
+\forall M \cdot \mathcal{A}_M \land M^{\uparrow} \Rightarrow \sometime (\mathcal{G}_M \land M^{\downarrow})
+\label{eq:contract_rule}
+\end{equation}
+\begin{quote}
+If module, $M$, receives an input and its assume is true then eventually it will emit an output and its guarantee will be true.
+\end{quote}
+
+The biggest change I've needed to work with the framework is some way of handling how the truth of formulae not involving fluents is affected by module execution (which should be not at all).  So I have a variant on the contract rule which is:
+
+\begin{equation}
+\forall M, \overline{x} \cdot \overline{x} \cup f_{M} = \emptyset \land \phi(\overline{x}) \land \mathcal{A}_M \land M^{\uparrow} \Rightarrow \sometime (\mathcal{G}_M \land M^{\downarrow} \land \phi(\overline{x}))
+\label{eq:fluent_rule}
+\end{equation}
+\begin{quote}
+If module, $M$, receives an input and its assume is true then eventually it will emit an output and its guarantee will be true.
+Moreover if, at input, some formula not involving any fluents is true then it is still true at output.  
+\end{quote}
+I call this the {\bf Fluent Rule}.  Obviously the contract rule is a special case of the fluent rule.  I use this one \emph{a lot}.
+
+Then I want to adapt the rules in the FOL framework that allow us to connect results from more than two modules.  I started with something much more like our framework rules, but ended up with something that just talks about how signals go around the system:   I've adapted from what I think is an implicit assumption that for a module to execute it needs to receive all inputs, to only needing one input.  I've called it the {\bf Chain Rule}:
+
+\begin{equation}
+\forall M_1, M_2 \cdot M_1^{\downarrow} \land M_1^{\downarrow} \in \overline{i_{M_2}} \Rightarrow M_2{\uparrow}
+\label{eq:chain}
+\end{equation}
+\begin{quote}
+If, a module, $M_1$ emits an output that output is an input signal for another module $M_2$ then $M_2$ receives an input signal.
+\end{quote}
+
+{\bf Note:}. The Contract/Fluent rules can/should probably be extended to specify that it is the \emph{next} output in the sometime part of the rule.  I didn't need it for this proof, but it might prove useful to have the ability to talk about the next output and some eventual output when we discuss more complex systems.  Similarly, I assume that any input triggers module execution, but where a module can get input from more than one other module we might want to distinguish between modules that execute on any input and modules that need all inputs and have a variety of chain rules accordingly.  Likewise, at some point, we might want to distinguish between outputs.
+
+\section{Contracts for the Modules}
+So I have a signature for my System:
+$$
+\begin{array}{r}
+\Sigma = \{GoalSet \in \{((\mathbb{N}, \mathbb{N}), \mathbb{N})\}, g \in (\mathbb{N}, \mathbb{N}), chargePos \in (\mathbb{N}, \mathbb{N}), recharge \in \{true, false\}, s_o \in (\mathbb{N}, \mathbb{N}), \\
+plan \in \{(\mathbb{N}, \mathbb{N}), b \in \mathbb{N}, t\in \mathbb{N}, execute:\{(\mathbb{N}, \mathbb{N})\} \rightarrow \{true, false\}\}\}
+\end{array}
+$$
+
+\subsection{Goal Selection}
+The Goal Selection Module, $G$, picks a target location based on a  heat-map and whether a recharge is needed.
+\begin{description}
+\item[Inputs] $E^{\downarrow}$ (Plan Execution Module), $H^{\downarrow}$ (Infra red sensor -- not specified and doesn't seem to be necessary for the proof).
+\item[Fluents] $g$
+\item[Assume] $\mathcal{G}_E$
+\item[Guarantee] $g \neq chargepos \Rightarrow (\exists h \cdot h \in \mathbb{N} \land (g,h) \in GoalSet) \land (\forall x,y,h_1 \cdot ((x,y),h_1) \in GoalSet \Rightarrow h \geq h_1) )  \land (recharge \iff g = chargePos)$\
+\end{description}
+
+
+Here we see that:
+
+\begin{itemize}
+\item the Goal Selection modules's {\bf inputs} are the Plan Execution Module, $E$, and an infra red sensor that generates heat maps (which go into $GoalSet$).
+
+\item It's {\bf fluents} are $g$ -- it generates a new target goal $\{g = (x, y)\}$.  
+
+\item It {\bf assumes} that its inputs meet the guarantees of the plan execution module and 
+\item in turn it {\bf guarantees} that:
+
+\begin{enumerate}
+\item if the output goal is not the charge Position ($g \neq chargePos$) then it is in the goal set and for all other goals in GoalSet the heat is higher than for $g$ (i.e., $g$ is the location in the Goal Set with the highest heat).
+\item If a recharge is needed then $g$ is the charge position.
+\end{enumerate}
+\end{itemize}
+
+\subsection{Planning}
+The Contract for the Planner is.
+
+\begin{description}
+\item[Inputs] $G^{\downarrow}$ (Goal Selection Module), $S^{\downarrow}$ (a SLAM module (not specified) that provides the current position).
+\item[Fluents] $plan$
+\item[Assume] $\mathcal{G}_G$
+\item[Guarantee] $g = s_0 \Rightarrow plan = \{(s_0, s_0)\} \land s_0 \in plan \land g \in plan \land (\exists q, r \cdot q,r \in plan \land adjacent(s_0, q) \land adjacent(g,r)) \land \forall p_0 \cdot p_0 \in plan \land p_0\neq s_0 \land p_0 \neq g \Rightarrow (\exists q,r \cdot q,r\in p \land adjacent(q, p_0) \land adjacent(r,p_0))$
+\end{description}
+
+
+Here we see that:
+\begin{itemize}
+\item the Planner's {\bf inputs} are the Goal Selection Module, $G^{\downarrow}$, and some SLAM module $S^{\downarrow}$.
+\item It's {\bf fluents} $plan$ -- it generates a motion plan to reach the goal.
+\item It {\bf assumes} that its inputs meet the guarantees of the Goal Selection module and
+\item It {\bf guarantees} that:
+\begin{enumerate}
+\item If the goal equals the starting point then the plan is a null plan (moves from $s_0$ to $s_0$).
+\item Both the agent's initial position and the target goal are contained in the plan.
+\item If there are points $q, r$ in a plan next to the initial position and goal respectively.
+\item For all points $p_0$ in the plan not equal to the initial position or goal position, then there are points $q, r$ in the plan next to $p_0$.
+\end{enumerate}
+\end{itemize}
+
+\subsection{Plan Execution}
+The contract for the Plan Execution module is:
+
+\begin{description}
+\item[Inputs] $P^{\downarrow}$ (Planning Module), $B^{\downarrow}$ (The Battery).
+\item[Fluents] $recharge, execute$
+\item[Assume] $\mathcal{G}_P$
+\item[Guarantee] $(((b - t) > length(plan) \lor g = chargePos) \iff execute(plan)) \land ( (execute(plan) = false \land recharge = true) \iff (b - t) \leq length(plan) \land g \neq chargePos) \land  \forall p \cdot p \neq plan \Rightarrow execute(p) = false$
+\end{description}
+ 
+ Here we see that:
+ \begin{itemize}
+\item the Plan Execution module's {\bf inputs} the Planner and some battery module.
+\item It's {\bf fluents} are the recharge signal/command and plan execution signal/command
+\item It {\bf assumes} that its inputs meet the guarantees of the Planning module and
+\item It {\bf guarantees} that:
+ \begin{enumerate}
+ \item It the length of the plan is greater less than the available battery power (minus some threshold, $t$, reserved to, for instance, ensure the robot can always reach the charging position) or current goal is the charging position, then it executes the plan.
+  \item It calls recharge and doesn't execute the current plan if the length of the plan is below the available battery power (minus the threshold) and the current goal is not the charging position.
+ \item It doesn't execute anything other than the plan.
+\end{enumerate}
+ \end{itemize}
+ 
+ \section{What I want to prove}
+ 
+ I property I would like to establish is.
+ 
+ \begin{quote}
+ If the current plan is longer than the battery available (minus threshold), then eventually the current plan will contain the charging position as the goal.
+ \end{quote}
+ NB.  Ideally, this would extend to ``and the current plan gets executed" but I ran out of energy...
+ 
+ After a certain amount of fiddling, I ended up with:
+ \begin{equation}
+ \always ((\mathcal{A}_E \land E^{\uparrow} \land length(plan) > b - t ) \Rightarrow \sometime (\mathcal{G}_E \land E^{\downarrow} \land g = chargePos \land  g \in plan))
+ \end{equation}
+\begin{quote}
+It is always the case that if the Plan Execution module receives an input signal and its Assume is true and at that time length of the current plan is greater than the battery (minus threshold) then eventually the module will emit an output, its guarantee will hold and the current plan will contain the charging position as the goal.
+\end{quote}
+
+I'm used to working with theorem provers -- so my approach to this sort of thing is to work backwards breaking things down into subgoals.  I'm going to handwave a lot of stuff in what follows with ``by standard logical manipulation" even though I'm aware that this is where theorem provers often say ``no''.
+
+From standard logic we can assume $ (g = chargePos \lor g \neq chargePos)$.   So again, from standard logical manipulation I'm splitting my theorem into two subgoals:
+ 
+ \begin{itemize}
+ \item$\always ((\mathcal{A}_E  \land E^{\uparrow} \land length(plan) > b - 15 \land g = chargePos) \Rightarrow \sometime (\mathcal{G}_E \land E^{\downarrow} \land g = chargePos \land  g \in plan))$
+ \item $\always ((\mathcal{A}_E  \land E^{\uparrow} \land  length(plan) > b - 15 \land g \neq chargePos) \Rightarrow \sometime (\mathcal{G}_E \land E^{\downarrow} \land g = chargePos \land  g \in plan))$
+ \end{itemize}
+  
+ \subsection{First Subgoal}
+ Intuitively this should hold because the Planning module guarantees that $g \in plan$ as part of its output and if $g=chargePos$ then we're done.  
+ We can therefore ignore the whole bit about plan length.  
+ 
+ So let's reduce our goal to:
+ 
+ $$\always ((\mathcal{A}_E \land E^{\uparrow} \land  g = chargePos) \Rightarrow \sometime (\mathcal{G}_E \land E^{\downarrow} \land g = chargePos \land  g \in plan))$$
+ 
+This is where I needed something like the fluent rule, in order to prove that if $g=chargePos$ before execution of $E$ then $g=chargePos$ after execution.  Anyway, since nether $g$ nor $plan$ are in $f_E$, I can use the fluent rule to get the goal:
+
+$$\always (\mathcal{A}_E \land E^{\uparrow} \land   g = chargePos) \Rightarrow (\mathcal{A}_E \land E^{\uparrow} \land g = chargePos \land g \in plan)$$
+(i.e., if the inputs to the Plan Execution agent have the current goal as the charging position, then the current goal is the charging position (trivially true) and $g$ is in the plan)
+
+A bit of tidying and simplifying here reduces the goal to: 
+$$\mathcal{A}_E \Rightarrow g \in plan$$
+(i.e., The assume of the Plan Selection agent implies that  g is in the plan).
+
+
+We have $\mathcal{A}_E = \mathcal{G}_P$ so we can change the goal to:
+
+$$\mathcal{G}_P \Rightarrow g \in plan$$
+
+Which is trivially true.  
+
+ \subsection{Second Subgoal}
+ $$\always (\mathcal{A}_E \land E^{\uparrow} \land  (length(plan) > b - 15 \land g \neq chargePos)) \Rightarrow \sometime (\mathcal{G}_E \land E^{\downarrow} \land g = chargePos \land  g \in plan))$$
+ 
+ So I'm going to use my first subgoal here to reduce the goal to:
+ 
+ $$\always (\mathcal{A}_E \land E^{\uparrow} \land  (length(plan) > b - 15 \land g \neq chargePos)) \Rightarrow \sometime  (\mathcal{A}_E \land E^{\uparrow} \land g = chargePos)$$
+ (i.e., if at some point on when the Plan Execution module receives an input the current plan is over the battery threshold then eventually  the Plan Execution module will receive an input and the target goal will be the charging position)
+ 
+ Using the chain rule (if $P$ emited a signal then $E$ receives a signal) and $\mathcal{G}_P = \mathcal{A}_E$:
+ 
+ $$\always (\mathcal{A}_E \land E^{\uparrow} \land  (length(plan) > b - 15 \land g \neq chargePos)) \Rightarrow \sometime (\mathcal{G}_P \land P^{\downarrow} \land g = chargePos)$$
+
+$g$ is not in $f_P$ so we can use the fluent rule:
+
+$$\always (\mathcal{A}_E \land E^{\uparrow} \land  (length(plan) > b - 15 \land g \neq chargePos)) \Rightarrow \sometime  (\mathcal{A}_P \land P^{\uparrow} \land g = chargePos)$$
+
+
+Chain rule and $\mathcal{G}_G = \mathcal{A}_P$:
+$$\always (\mathcal{A}_E \land E^{\uparrow} \land  (length(plan) > b - 15 \land g \neq chargePos)) \Rightarrow \sometime  (\mathcal{G}_G \land G^{\downarrow} \land  g = chargePos)$$
+
+Now the guarantee of $G$ says that $g = chargePos \iff recharge$ so that gives us:
+
+$$\always (\mathcal{A}_E \land E^{\uparrow} \land  (length(plan) > b - 15 \land g \neq chargePos)) \Rightarrow \sometime  (\mathcal{G}_G \land G^{\downarrow} \land  recharge)$$
+
+Since $recharge \not\in f_G$ we can use the fluent rule:
+
+$$\always (\mathcal{A}_E \land E^{\uparrow} \land  (length(plan) > b - 15 \land g \neq chargePos)) \Rightarrow \sometime (\mathcal{A}_G \land G^{\uparrow} \land recharge)$$
+
+Chain rule and $\mathcal{G}_E = \mathcal{A}_G$:
+
+$$\always (\mathcal{A}_E \land E^{\uparrow} \land  (length(plan) > b - 15 \land g \neq chargePos)) \Rightarrow \sometime (\mathcal{G}_E \land E^{\downarrow} \land recharge)$$
+
+$\mathcal{G}_E$ includes the conjunct $( (execute(plan) = false \land recharge = true) \iff (b - t) \leq length(plan) \land g \neq chargePos) $ so a little logic gives us:
+
+$$\always (\mathcal{A}_E \land E^{\uparrow} \land  (length(plan) > b - 15 \land g \neq chargePos)) \Rightarrow \sometime (\mathcal{G}_E \land E^{\downarrow} \land  (b - 15) \leq length(plan)) \land g \neq chargePos) $$
+
+$b$, $g$, and $plan$ are not fluents so:
+$$\always (\mathcal{A}_E \land E^{\uparrow} \land  (length(plan) > b - 15 \land g \neq chargePos)) \Rightarrow \sometime (\mathcal{A}_E \land E^{\uparrow} \land  (b - 15) \leq length(plan)) \land g \neq chargePos) $$
+
+Which is trivially true after a bit of logical manipulation and we're done!
+
+\section{Conclusion}
+
+What is the conclusion here?  Despite the fact I've changed the notation around inputs and outputs I think we can probably still use the existing notation (I went round the houses a bit figuring this out, hence why a new notation got introduced).  But I think, to be useful, we really need something like the fluent rule and I think that means we really need to have some concept of module fluents and to  be able to explicitly refer to the moments when signals are received and emitted.
+
+\end{document}
