@@ -16,7 +16,6 @@
 %    Initial code   
 % ----------------------------------
 
-
 % ----------------------------------
 %    Declaration of options   
 % ----------------------------------
@@ -39,6 +38,8 @@
 % ----------------------------------
 %    Main code
 % ----------------------------------
+
+\NoteFamily{Louise's Blue Book Note}
 
 \NoteFootnote{%
          Notes in this series are for $\epsilon$-baked ideas, 
