@@ -1,7 +1,7 @@
 # bluebook
 Blue Book Notes: These are for part-baked research ideas. They are usually short. There is no standard that they are expected to reach. 
 
-They are inspired by the blue book note series used by the Alan Bundy's DReaM group at the University of Edinburgh for many years to communicate and discuss research ideas.
+They are inspired by the blue book note series used by Alan Bundy's DReaM group at the University of Edinburgh for many years to communicate and discuss research ideas.
 
 Index:
 
