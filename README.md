@@ -5,6 +5,7 @@ They are inspired by the blue book note series used by Alan Bundy's DReaM group 
 
 Index:
 
-1.  Action Lifecycles in Gwendolen
+1. Action Lifecycles in Gwendolen
 2. Trying to Use the Compositional Framework
 3. Explanations for Forward-Chaining Rules-Based Systems (to be implemented in Prolog)
+4. Examples of Action Failure

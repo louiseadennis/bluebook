@@ -1,0 +1,288 @@
+\documentclass{blue-book}
+\NoteNumber{5}
+
+\usepackage{graphicx}
+\usepackage{amssymb,amsmath,amsthm}
+\usepackage{listings}
+
+\let\sometime=\lozenge
+\let\always=\Box
+
+\title{Sketch Proof that our Dialogue System will identify Disagreements in Reasoning}
+\author{Louise A. Dennis}
+
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}{Lemma}
+
+\newcommand{\drule}[3]{\ensuremath{#1:#2 \rightarrow #3}}
+
+\usepackage[colorinlistoftodos]{todonotes}
+% \presetkeys%
+%     {todonotes}%
+%     {inline}{}
+\newcommand{\ldnote}[1]{\todo[linecolor=yellow,backgroundcolor=blue!25,bordercolor=blue]{LD: #1}}
+\newcommand{\louiseinline}[1]{\todo[inline, color=yellow!50]{Louise: #1}}
+
+\begin{document}
+\maketitle
+
+Yifan, Clare and I have been working on a dialogue based system for explaining reasoning in rules-based systems.  Broadly speaking we assume the existence of a directed acyclic graph representing a chain of reasoning from some set of facts ($F$) using a set of rules ($R$) to deduce some set of conclusions ($C$).  Each node in the graph is labelled with the fact or conclusion deduced (represented as a first-order formula) and either the label \texttt{initial\_fact} indicating an initial fact or the rule that was used to deduce term labelling the node.  
+
+When some one wants an explanation they engage in a dialogue.  They can ask \emph{why} a particular node is believed in which case they are informed that it was either an initial fact, or it was deduced from its parent nodes using the rule.  A user can also ask \emph{why not} questions -- i.e., why does some formula not appear in the reasoning graph.  In this case the system turns this around and asks them why they believe that.
+
+The intention is that through this dialogue the user can understand either that the system did (or did not) believe some initial fact that the user does not (or does) believe or that the system and user's rules differ.
+
+\begin{sloppypar}
+This note aims at trying to establish some formal properties of this process and follows the reasoning in~\cite{DennisAAMAS21}.
+\end{sloppypar}
+
+\section{Preliminaries}
+We have some language of terms, ${\cal L}$, defined in a standard way.
+\louiseinline{may need to be more precise about ``in a standard way''}
+
+\begin{itemize}
+\item We have a set of labels $L$.
+
+\item We have a set of initial facts, $F$, these consist of positive literals in ${\cal L}$.
+
+\item We have a set of rules, $R$.  A rule is a horn clause consisting of a set of literals in ${\cal L}$ (the antecedants, $A$), and a consequent, a positive literal $C$, and a label $l \in L$.  We write a rule as $\drule{l}{A}{C}$. 
+\end{itemize}
+
+
+\subsection{Proof Graphs}
+
+\begin{itemize}
+\item We have a set of nodes, $N$, where $N$ is a tuple, $\langle t, l\rangle$ consisting of a positive literal, $t$, (the \emph{node term} and a label, $l \in L \cup \{initial\}$, the \emph{node label}.
+\end{itemize}
+
+We are going to define what we mean by a proof graph.  A proof graph is a directed acyclic graph with the following properties.
+
+A \emph{proof graph} is defined recursively as follows:
+
+\begin{itemize}
+\item A node, $n = \langle t, l\rangle$, is a proof graph if $t \in F$, $l = initial$ and it has no outgoing edges connecting it to other nodes.
+\item A node $n = \langle t, l\rangle$ is a proof graph iff there exists a rule $\drule{l}{A}{C}$ such that there exists a substitution, $\theta$ for the free variables in $C$ such that $C\theta = t$ and for each positive literal $t' \in A$ there exists a node, $n' = \langle t'\theta, l'\rangle$ which is connected to $n$ by an outgoing edge from $n$ to $n'$(each of the antecedants of the rule is matched by a parent node for $n$) and for every node, $n' = \langle t', l'\rangle$ connected to $n$ by an outgoing edge from $n$ there exists a term $t'' \in A$ such that $t''\theta = t'$.
+\louiseinline{I've just realised I'm missing here how we deal with negative literals in rule antecedants.  I'm just going to point that out and proceed assuming we're only dealing with positive literals.}
+\end{itemize}
+
+We say a positive literal, $t$, appears in proof graph $G$ if there exists a node in $\langle t, l\rangle \in G$. We will abuse notation and write this as $t \in G$.  
+
+Where $G$ is a proof graph constructed as above we will say it is \emph{correct with respect to $F$ and $R$}.  
+\louiseinline{At some point we are going to have to tidy this up so that the definition explicitly acknowledges in the notation somehow that the proof graph is with respect to the facts and rules.}
+
+For the sake of argument we assume that a proof graph has some completeness property meaning it represents all possible deductions of literals from the initial facts given the rules available.  
+\louiseinline{We'll need to define this formally at some point or explain how partial/incomplete proof graphs work with the dialogues.}
+
+\louiseinline{I'm going to stop talking about substitutions, $\theta$ etc., from this point.  They make everything harder to read and I don't think they make much difference to correctness.  At some point they will have to be put back though.  For now, though, we will assume there are no variables anywhere so we can ignore them.}
+
+\section{Problem Statement}
+
+We need to formalise the idea of a disagreement between the user and the reasoning system.  We will simplify the problem to identifying a \emph{cause} of a difference between two proof graphs (this is obviously a massive simplification of why a user might want more information about a reasoning system's deduction, but it is a solid first step).
+
+Lets formalise a deduction as a tuple $\langle F, R, G\rangle$ where $F$ is a set of initial facts, $R$ a set of rules and $G$ a proof graph which is correct with respect to $F$ and $R$.
+\louiseinline{Not sure about terminology here}
+
+Our problem is, given two deductions $\langle F_1, R_1, G_1\rangle \neq \langle F_2, R_2, G_2\rangle$ can we identify at least one fact, $t$ such that $t \in F_1$ and $t \not\in F_2$ (or vice versa) or at least one rule $r$ such that $r \in R_1$ and $r\not\in R_2$.
+
+
+\section{A Dialogue}
+
+A dialogue is a sequence of moves taken by two players.  $P_1$ knows all the information in $\langle F_1, R_1, G_1\rangle$ while $P_2$ knows all the information in $\langle F_2, R_2, G_2\rangle$.  The two players gradually build up a model of how the other player has reasoned.  This model consists of three sets $Y_{ij}$, $F_{ij}$, $N_{ij}$ and $YR_{ij}$:
+\begin{itemize}
+\item $Y_{ij}$ consists of terms $t$ that $P_i$ has established that $P_j$ believes to be true
+\item $F_{ij}$ consists of terms $t$ that $P_i$ has established that $P_j$ had as an initial fact.  $F_{ij} 
+\subseteq Y_{ij}$
+\item$N_{ij}$ consists of terms $t$ that $P_i$ has established that $P_j$ does not believe to be true.
+\item $YR_{ij}$ consists of rule labels $l$ that $P_i$ has established label on of $P_j$'s rules. 
+\end{itemize}
+
+
+The starting point for the dialogue is a term $t$ which, for the sake of argument, we'll say appears in $G_2$ and not in $G_1$.  So $t$ is something one of them has deduced and the other hasn't.  We don't worry at this point about how the players have established this initial disagreement.
+
+For reference the state of player $i$ at statement $t$ in a dialogue with player $j$ is $S^i_t = \langle \langle F_i, R_i, G_i \rangle, Y_{ij}, F_{ij}, N_{ij}, YR_{ij} \rangle$.  The initial state of a player 1 above is, $S^1_0 = \langle \langle F_1, R_1, G_1 \rangle, \{t\}, \emptyset, \emptyset, \emptyset \rangle$ (player 1 knows Player 2 believes $t$ but doesn't know anything else about their state) and the initial state of player 2 is $S^2_0 = \langle \langle F_2, R_2, G_2 \rangle, \emptyset, \emptyset, \{t\}, \emptyset \rangle$ (player 2 knows player 1 doesn't believe $t$ but doesn't know anything else about them).  Either player can start the dialogue.
+
+
+At each stage in the dialogue a player may make one of six statements:  
+\begin{enumerate}
+\item $\mathit{different\_fact(t, i, j)}$ -- $i$ has $t$ as an initial fact and $j$ does not.
+\item $\mathit{different\_rule(\drule{l}{A}{C}, i, j)}$ -- $i$ has $\drule{l}{A}{C}$ as a rule and $j$ does not.
+\item $initial(t)$ -- $t$ is an initial fact for the Player.
+\item $\drule{l}{a}{t}$ -- the player deduced $t$ from the terms in $A$ using the rule labelled $l$
+\item $why(t)$ - why do you believe $t$?
+\item $whynot(t)$ -- why don't you believe $t$
+\end{enumerate}
+The first two statements terminate the dialogue.
+
+A state of a dialogue at statement $t$, $S_t$ consists of the two player states, the last dialogue statement, $s$, and whose turn it is $i$.  $S_t = \langle S^1_t, S^2_t, s, i \langle$
+
+When it is player $i$'s turn they first update their state:
+
+\begin{enumerate}
+\item If $s = initial(t)$ then $P_i$ adds $t$ to $Y_{ij}$ and $F_{ij}$.  So if $S^i_t = \langle F_i, R_i, G_i \rangle, Y_{ij}, F_{ij}, N_{ij}, YR_{ij} \rangle$ then  $S^i_{t + 1} = \langle F_i, R_i, G_i \rangle, Y_{ij} \cup \{t\}, F_{ij} \cup \{t\}, N_{ij}, YR_{ij} \rangle$ (I'm using $t$ for two things here.  This needs to be fixed).
+\item If $s = \drule{l}{a}{t}$ and $l  \in R_i$ then $P_i$ adds all the positive literals in $a$ to $Y_{ij}$ (these are things the other player believes) and all the negative literals in $a$ to $N_{ij}$ (these are all the things the other player does not believe) and adds $l$ to $YR_{ij}$ -- this is a rule the other player has. $S^i_{t + 1} = \langle F_i, R_i, G_i \rangle, Y_{ij} \cup pos(a), F_{ij}, N_{ij} \cup neg(a), YR_{ij} \cup \{l\} \rangle$ 
+\item If $s = why(t)$ then $P_i$ adds $t$ to $N_{ij}$ (the other player doesn't believe $t$). $S^i_{t + 1} = \langle F_i, R_i, G_i \rangle, Y_{ij}  , F_{ij}, N_{ij} \cup \{t\}, YR_{ij} \rangle$ 
+\item If $s = whynot(t)$ then $P_i$ adds $t$ to $Y_{ij}$ (the other player believes $t$).  $S^i_{t + 1} = \langle F_i, R_i, G_i \rangle, Y_{ij} \cup \{t\}, F_{ij}, N_{ij} , YR_{ij} \rangle$ 
+\end{enumerate}
+
+Legal  moves for player $P_i$ in their turn in the dialogue are as follows:
+
+\begin{enumerate}
+\item If $s = why(t)$ and $t \in F_i$ then $initial(t)$.
+\item If $s = why(t)$ and $t \not\in F_i$ then for some node $n = \langle t, l\rangle \in G_i$ answer $\drule{l}{A}{t}$ where $A$ are the terms for $n$'s parent nodes.
+\item If $s = whynot(t)$ then answer $why(t)$.
+\item If $s \neq why(t)$ and $s \neq whynot(t)$ then for some $t \in G_i \cup N_{ij}$ the player may ask $whynot(t)$.  The player identifies a term $t$ that it believes and it has established the other doesn't and asks why not.
+\item If $s \neq why(t)$ and $s \neq whynot(t)$ For some $t \in Y_{ij}\backslash G_i$ the player may ask $why(t)$.  The player identifies a term $t$ that it does not believe and it has established the other does  and asks why not.
+\item If $s \neq why(t)$ and $s \neq whynot(t)$ For some $t \in F_{ij}$ where $t \not\in F_i$ the player may state $\mathit{different\_fact}(t, j, i)$.  Player $i$ has identified that $t$ was an initial fact for Player $j$ but not for Player $i$.
+\item If $s \neq why(t)$ and $s \neq whynot(t)$ For some $t \in N_{ij}$ where $t \in F_i$ the player may state $\mathit{different\_fact}(t, i, j)$.  Player $i$ has identified that $t$ was an initial fact for Player $i$ but not for Player $j$.
+\item If $s \neq why(t)$ and $s \neq whynot(t)$ For some rule label, $l \in YR_{ij}$ then the player may state $\mathit{different\_rule}(l, j, i)$.  Player $i$ has identified that $l$ is a rule for  Player $j$ but not for Player $i$.
+\end{enumerate}
+
+\louiseinline{We are going to need some rules that say a player can only make some move once (i.e., they can't keep just asking $why(t)$ repeatedly for some $t$).}
+
+\louiseinline{I think we are going to have to implement all the above for the computer player -- i.e., it's going to have to maintain sets of what the user does and doesn't believe.  We are probably going to have to use this also to generate possible answers for the human user in some way - though given the computer won't know their $F$ and $R$ we may need to provide them with possible moves that are not legal.}
+
+\section{Proofs}
+
+\begin{lemma}
+\label{lem:initial}
+If the current state of a dialogue is $\langle S^1_t, S^2_t, initial(t), i \rangle$ then $t \in F_j$ and $t \in G_j$.
+\end{lemma}
+\begin{proof}
+If it is player $i$'s turn then $initial(t)$ was uttered by player $j$.  This could only be uttered if $t \in F_j$.  Because if $t \in F_j \rightarrow t \in G_j$ (we will have to specify that this is the case) then $t \in G_j$.
+\end{proof}
+\begin{lemma}
+\label{lem:drule}
+If the current state of a dialogue is $\langle S^1_t, S^2_t, \drule{l}{a}{t}, i \rangle$ then $pos(a) \subseteq G_j$ and $neg(a) \cap G_j = \emptyset$ and $l \in R_j$.
+\end{lemma}
+\begin{proof}
+If it is player $i$'s turn then $\drule{l}{a}{t}$ was uttered by player $j$.  This could only be uttered if $n = \langle t, l \rangle \in G_j$ and $A$ are the terms in $n$'s parents nodes (handwaving negative literals here) so $a \subseteq G_j$ \louiseinline{abuse of notation, $G_j$ is not a set but basically all of $a$ appear in $G_j$} and $l \in R_j$ (by the definition of a correct proof graph).
+\end{proof}
+\begin{lemma}
+\label{lem:why}
+If the current state of a dialogue is $\langle S^1_t, S^2_t, why(t), i \rangle$ then $t \not\in G_j$.
+\end{lemma}
+\begin{proof}
+If it is player $i$'s turn then $why(t)$ was uttered by player $j$.  This could only be uttered if $t \in Y_{ji} \backslash G_j$ therefore $t \not\in G_j$.
+\end{proof}
+\begin{lemma}
+\label{lem:whynot}
+If the current state of a dialogue is $\langle S^1_t, S^2_t, whynot(t), i \rangle$ then $t \in G_j$.
+\end{lemma}
+\begin{proof}
+If it is player $i$'s turn then $whynot(t)$ was uttered by player $j$.  This could only be uttered if $t \in N_{ji} \cup G_j$ therefore $t \in G_j$.
+\end{proof}
+
+\paragraph{State updates are correct}. From those we need to establish a set of proofs that for instance $t \in F_{ij}$ iff $t \in F_j$ (i.e., player $i$ only decides player $j$ has $t$ as an initial fact if player $j$ does indeed have $j$ as an initial fact).  The same for $Y_{ij}$, $N_{ij}$ etc. etc.  This involves going through the statements $j$ can make that will lead to $i$ updating those steps.
+
+\begin{theorem}
+Given two dialogue participants $i$ and $j$, $F_{ij} \subseteq F_j$.  That is $i$'s model of $j$'s initial facts is a subset.
+\end{theorem}
+\begin{proof}
+We will argue by induction considering each time something is added to $F_{ij}$.
+
+{\bf base case}.  In the initial state of the dialogue $F_{ij} = \emptyset$ therefore $F_{ij} \subseteq F_j$.
+
+{\bf step case}.  A term $t$ is added to $F_{ij}$ when $s = initial(t)$.  From Lemma~\ref{lem:initial} we know that in this case $t \in F_j$.  Therefore if $F_{ij} \subseteq F_{j}$ before $t$ is added to it then $F_{ij} \cup \{t\} \subseteq F_{j}$.
+
+\end{proof}
+\begin{theorem}
+Given two dialogue participants $i$ and $j$, $Y_{ij} \subseteq G_j$.  That is $i$'s model of $j$'s beliefs is a subset of the terms in $j$'s DAG.
+\end{theorem}
+\begin{proof}
+We will argue by induction considering each time something is added to $Y_{ij}$.
+
+{\bf base case}.  There are two possible initial states of $Y_{ij}$ either $Y_{ij} = \{t\}$ where $t$ is a term that appears in $G_j$ but not in $G_i$.  In this case, since $t \in G_j$ then $\{t\} \subseteq G_j$.  Otherwise $Y_{ij} = \emptyset$ and so $Y_{ij} \subseteq G_j$
+
+{\bf step case}.  A term $t$ is added to $Y_{ij}$ when:
+\begin{enumerate}
+\item  $s = initial(t)$.  From Lemma~\ref{lem:initial} we know that in this case $t \in G_j$.  Therefore if $Y_{ij} \subseteq G_{j}$ before $t$ is added to it then $Y_{ij} \cup \{t\} \subseteq G_{j}$.
+\item $s = \drule{l}{a}{r}$ and $t$ is a positive literal in $a$.  From Lemma~\ref{lem:drule} we know that $pos(a) \subseteq G_{j}$ therefore if $Y_{ij} \subseteq G_{j}$ then $Y_{ij} \cup pos(a) \subseteq G_{j}$.
+\item $s = whynot(t)$.  From Lemma~\ref{lem:whynot} we  know that in this case $t \in G_j$.  Therefore if $Y_{ij} \subseteq G_{j}$ before $t$ is added to it then $Y_{ij} \cup \{t\} \subseteq G_{j}$.
+\end{enumerate}
+\end{proof}
+
+\begin{theorem}
+Given two dialogue participants $i$ and $j$, $N_{ij} \cap G_j = 
+emptyset$.  That is $i$'s model of things $j$ doesn't believe doen't contain anything in $j$'s DAG
+\louiseinline{Abuse of notation to treat $G$ as a set again}
+\end{theorem}
+\begin{proof}
+We will argue by induction considering each time something is added to $N_{ij}$.
+
+{\bf base case}.  There are two possible initial states of $N_{ij}$ either $N_{ij} = \{t\}$ where $t$ is a term that appears in $G_i$ but not in $G_j$.  In this case, since $t \not\in G_j$ then $\{t\} \cap G_j = \emptyset$.  Otherwise $N_{ij} = \emptyset$ and so $N_{ij} \subseteq G_j$
+
+{\bf step case}.  A term $t$ is added to $N_{ij}$ when:
+\begin{enumerate}
+\item $s = \drule{l}{a}{r}$ and $t$ is a negative literal in $a$.  From Lemma~\ref{lem:drule} we know that $neg(a) \cap G_{j} = \emptyset$ therefore if $N_{ij} \cap G_{j} = \emptyset$ then $N_{ij} \cup neg(a) \cap G_{j} = \emptyset$.
+\item $s = why(t)$.  From Lemma~\ref{lem:why} we  know that in this case $t \not\in G_j$.  Therefore if $N_{ij} \cap G_{j} = \emptyset$ before $t$ is added to it then $(N_{ij} \cup \{t\}) \cap G_{j} = \emptyset$.
+\end{enumerate}
+\end{proof}
+
+\begin{theorem}
+Given two dialogue participants $i$ and $j$, $R_{ij} \subseteq R_j$.  That is $i$'s model of $j$'s rules is a subset  $j$'s rules.
+\end{theorem}
+\begin{proof}
+We will argue by induction considering each time something is added to $R_{ij}$.
+
+{\bf base case}.  In the initial state of the dialogue $R_{ij} = \emptyset$ therefore $R_{ij} \subseteq R_j$.
+
+
+{\bf step case}.  A rule label $l$ is added to $R_{ij}$ when $s = \drule{l}{a}{r}$ .  From Lemma~\ref{lem:drule} we know that $l \in R_j $ therefore if $R_{ij} \subseteq R_{j}$ then $R_{ij} \cup \{l\} \subseteq R_{j}$.
+\end{proof}
+
+
+
+\paragraph{Dialogues terminate} Then we need to show that if $P_i \neq P_j$ then eventually the dialogue will terminate.  That's going to be tricky.  I thought initially we could say that after every move one of the sets $F_{ij}$, $Y_{ij}$, $N_{ij}$ or $R_{ij}$ will get bigger but I think there is an edge case where a player says $\drule{l}{a}{c}$ where the other player already knows they know $l$ and already knows they know all the things in $a$ -- it's just they haven't yet explicitly established they used that rule with those particular facts to deduce something.  It may be that we can establish that for any term $t$ appearing in a node in either player's graph -- each player can only ask $whynot(t)$ or be asked $why(t)$ or say $initial(t)$ or $\drule{l}{a}{t}$ once and so, since the graphs are finite the dialogue eventually must terminate.  
+
+
+\paragraph{When dialogues terminate, a difference is detected} Then we have to show that it terminates by someone saying $\mathit{different\_fact}(t, i, j)$ or $\mathit{different\_rule}(l, i, j)$ not just because the dialogue has run out of legal moves.  I suspect this will involve showing that if no legal moves remain except those two then $F_{ij} = F_j$ and $R_{ij} = R_{j}$ (i.e., player $i$ now knows all of player $j$'s initial facts and rules) and so if the two players are not equal player $i$ must be able to make a terminating statement.
+
+\begin{theorem}
+If a dialogue state is $\langle S^1_t, S^2_t, s, i \rangle$ and $s \neq \mathit{different\_fact}(t, i, j)$ and $s \neq \mathit{different\_fact}(t, j, i)$ and $s \neq \mathit{different\_rule(l, i, j)}$ then there is a legal move available to $j$.
+\louiseinline{Think we are going to need this to establish that dialogues always end by identifying a difference, not just because no more moves are available}
+
+In practice this means that one of the following hold:
+\begin{enumerate}
+\item $G_i \cup N_{ij} \neq \emptyset$.
+\item $Y_{ij} \backslash G_i \neq \emptyset$.
+\item $F_{ij} \neq F_i$
+\item $N_{ij} \cap G_i \neq \emptyset$
+\item $YR_{ij} \cap R_i \neq \emptyset$.
+\end{enumerate}
+\louiseinline{need special cases for responding to $why$ and $whynot$.  I'll handle these later}
+\end{theorem}
+\begin{proof}
+We consider a proof by induction
+{\bf base case.}. In this case $Y_{12} = \{t\}$ and $N_{21} = \{t\}$ for some $t \in G_2$ and $t \not\in G_1$ (or vice versa).  So either 1 or 2 above is true.
+\louiseinline{needs neatening}.
+
+{\bf step case}.  We consider each possible utterance in turn.
+\begin{enumerate}
+\item $s = initial(t)$.  This can only be uttered in response to $why(t)$ so we know that $t \in F_j$ and $t \in G_j$ ($j$ believes $t$) and that $t \in Y_{ij}\backslash G_i$ (since $i$ asked $why(t)$).  Since $t \not\in G_i$ then $t \not\in F_i$ therefore after updating its state $F_{ij} \neq F_i$.
+\item $s = \drule{l}{a}{t}$.  This can only be uttered in response to $why(t)$ so we know that  $t \in G_j$ ($j$ believes $t$) and that $t \in Y_{ij}\backslash G_i$ (since $i$ asked $why(t)$).  Since $t \not\in G_i$ then there is no rule that would allow $i$ to deduce $t$ so either $l \not\in R_i$ and $YR_{ij} \cap R_i \neq \emptyset$ becomes true.  Or $pos(a) \not\subseteq G_i$ or $neg(a) \cap G_i \neq \emptyset$ (there is some difference in the antecedants).  If $pos(a) \not\subseteq G_i$ then after adding $pos(a)$ to $Y_{ij}$ we will have $Y_{ij} \backslash G_I \neq \emptyset$.  If $neg(a) \cap G_i \neq \emptyset$ then after adding $neg(a)$ to $N_{ij}$ then $N_{ij} \cap G_i \neq \emptyset$.
+\louiseinline{neaten up}
+\item $s = why(t)$.  In this case $t \in Y_{ji} \backslash G_j$ and is added to $N_{ij}$. Since $Y_{ji} \subseteq G_i$ (see theorem above) $N_{ij} \cap G_i \neq \emptyset$
+\item $s = whynot(t)$.  In this case $t \in G_j \cup N_{ji}$ and is added to $Y_{ij}$. Since $N_{ji} \cap G_i = \emptyset$ (see theorem above) $Y_{ij} \backslash G_i \neq \emptyset$
+\louiseinline{neaten up}
+\end{enumerate}
+\louiseinline{This may be proof by cases rather than induction.  I don't seem to be using the fact that the property held in the previous state}
+\end{proof}
+\louiseinline{This might be a lemma}
+
+
+\begin{theorem}
+If a dialogue terminates the last statement is: $s \neq \mathit{different\_fact}(t, i, j)$ or $s \neq \mathit{different\_fact}(t, j, i)$ or $s \neq \mathit{different\_rule(l, i, j)}$
+\end{theorem}
+\louiseinline{Think this is a straightforward corollary of the above}
+
+\begin{theorem}
+Dialogues terminate.
+\end{theorem}
+\begin{proof}
+We observe that DAG's are finite.\louiseinline{Might need to prove this}  In particular this means that there are a finite number of terms, $t$, appearing in the two DAGs.   Non-terminating statements that can be made in a dialogue all concern some term, $t$, that appears in the DAG of one of the participants, namely: $initial(t)$, $\drule{l}{a}{t}$, $why(t)$ and $whynot(t)$.  Since statements may not be repeated and the set of possible terms is finite, eventually the dialogue must terminate.
+\end{proof}
+
+
+\bibliography{bluebook}
+\bibliographystyle{apalike}
+\end{document}
