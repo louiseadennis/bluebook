@@ -16,7 +16,7 @@
 \newtheorem{definition}{Definition}
 
 \newcommand{\drule}[3]{\ensuremath{#1:#2 \rightarrow #3}}
-\newcommand{\pg}[2]{\ensuremath{pg(#1,#2)}}
+\newcommand{\pt}[2]{\ensuremath{pt(#1,#2)}}
 
 \usepackage[colorinlistoftodos]{todonotes}
 % \presetkeys%
@@ -53,20 +53,32 @@ We have some language of terms, ${\cal L}$, defined in a standard way.
 \end{itemize}
 
 
-\subsection{Proof Graphs}
+\subsection{Proof Trees}
 
+\begin{definition}{\bf (Proof Tree)}
+A proof tree is a pair of a set of nodes, $N$, and a set of edges $E$ where:
 \begin{itemize}
-\item We have a set of nodes, $N$, where $N$ is a tuple, $\langle t, l\rangle$ consisting of a positive literal, $t$, (the \emph{node term} and a label, $l \in L \cup \{initial\}$, the \emph{node label}.
+\item Each node $n \in N$ is a tuple, $\langle t, l\rangle$ consisting of a positive literal, $t$, (the \emph{node term}) and a label, $l \in L \cup \{initial, unprovable\}$, the \emph{node label}.
+\item $E \subseteq N \times N$, consists of ordered pairs of nodes from $N$
 \end{itemize}
+\end{definition}
 
-We are going to define what we mean by a proof graph.  A proof graph is a directed acyclic graph with the following properties.
 
-\begin{definition}{\bf (Proof Graph)}
-A \emph{proof graph} is defined recursively as follows:
+\begin{definition}
+If $T$ is a proof tree and $N$ the set of nodes in then and $t$ is a positive literal.  Then we say $t \in T$ ($t$ is in the tree) if there exists some $l \in L \cup \{initial, unprovable\}$ such that $\langle t, l \rangle$ is a node in $T$.
+\end{definition}
+
+\begin{definition}{\bf (Proof Tree for $F$ and $R$)}
+A \emph{proof tree}, $\pt{F}{R}$, for a set of facts, $F$, and rules, $R$ is defined recursively as follows:
 
 \begin{itemize}
-\item A node, $n = \langle t, l\rangle$, is a proof graph if $t \in F$, $l = initial$ and it has no outgoing edges connecting it to other nodes.
-\item A node $n = \langle t, l\rangle$ is a proof graph iff there exists a rule $\drule{l}{A}{C}$ such that there exists a substitution, $\theta$ for the free variables in $C$ such that $C\theta = t$ and for each positive literal $t' \in A$ there exists a node, $n' = \langle t'\theta, l'\rangle$ which is connected to $n$ by an outgoing edge from $n$ to $n'$ (each of the antecedants of the rule is matched by a parent node for $n$) and for every node, $n' = \langle t', l'\rangle$ connected to $n$ by an outgoing edge from $n$ there exists a term $t'' \in A$ such that $t''\theta = t'$.  For each negative literal $\neg t' \in A$ there is no node $n' = \langle t'\theta, l'\rangle$ in the proof graph.
+\item A node, $n = \langle t, l\rangle$, is a proof tree for $F$ and $R$ if $t \in F$, $l = initial$ and it has no outgoing edges connecting it to other nodes.
+\item A node, $n = \langle t, l\rangle$, is a proof tree for $F$ and $R$ if $l = unprovable$ and no proof tree for $F$ and $R$, $pt(F, R)$, exists such that $t \in pt(F, R)$
+\item Let ${\cal T}$ be a set of proof trees for $F$ and $R$.  
+
+If there exists a rule $\drule{l}{A}{C}$ and a substitution, $\theta$ for the free variables in $C$ such that $C\theta = t$ and for each positive literal $t' \in A$ there exists a $T \in {\cal T}$ such that $t' \in T$ and for each negative literal $\neg t' \in A$ there exists a $T \in {\cal T}$ such that $n' = \langle t'\theta, unprovable \rangle \in T$ then 
+
+a node, $n' = \langle t'\theta, l'\rangle$ which is connected to $n$ by an outgoing edge from $n$ to $n'$ (each of the antecedants of the rule is matched by a parent node for $n$) and for every node, $n' = \langle t', l'\rangle$ connected to $n$ by an outgoing edge from $n$ there exists a term $t'' \in A$ such that $t''\theta = t'$.  For each negative literal $\neg t' \in A$ there is no node $n' = \langle t'\theta, l'\rangle$ in the proof graph.
 \item For all $t \in F$, $\langle t, initial \rangle$ is in the proof graph.
 \item For all rules $\drule{l}{A}{C}$, if there exists a substitution, $\theta$, such that there exists a node $n' = \langle t'\theta, l'\rangle$ in the proof graph for every positive literal $t' \in A$ and there exists no node  $n' = \langle t'\theta, l'\rangle$ for any negative literal $\neg t' \in A$ then $\langle C\theta, l\rangle$ appears in the proof graph.
 \end{itemize}
