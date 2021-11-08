@@ -30,7 +30,7 @@
 \begin{document}
 \maketitle
 
-Yifan, Clare and I have been working on a dialogue based system for explaining reasoning in rules-based systems.  Broadly speaking we assume the existence of a directed acyclic graph representing a chain of reasoning from some set of facts ($F$) using a set of rules ($R$) to deduce some set of conclusions ($C$).  Each node in the graph is labelled with the fact or conclusion deduced (represented as a first-order formula) and either the label \texttt{initial\_fact} indicating an initial fact or the rule that was used to deduce term labelling the node.  
+Yifan, Clare and I have been working on a dialogue based system for explaining reasoning in rules-based systems.  Broadly speaking we assume the existence of a directed acyclic graph representing a chain of reasoning from some set of facts ($F$) using a set of rules ($R$) to deduce some conclusion ($C$).  Each node in the graph is labelled with the fact or conclusion deduced (represented as a first-order formula) and either the label \texttt{initial\_fact} indicating an initial fact or the rule that was used to deduce term labelling the node.  
 
 When some one wants an explanation they engage in a dialogue.  They can ask \emph{why} a particular node is believed in which case they are informed that it was either an initial fact, or it was deduced from its parent nodes using the rule.  A user can also ask \emph{why not} questions -- i.e., why does some formula not appear in the reasoning graph.  In this case the system turns this around and asks them why they believe that.
 
@@ -52,11 +52,12 @@ We have some language of terms, ${\cal L}$, defined in a standard way.
 \item We have a set of rules, $R$.  A rule is a horn clause consisting of a set of literals in ${\cal L}$ (the antecedants, $A$), and a consequent, a positive literal $C$, and a label $l \in L$.  We write a rule as $\drule{l}{A}{C}$. 
 \end{itemize}
 
+We will be using the concept of \emph{negation as failure} from Prolog.  That is we believe something is not true if we can not deduce from our initial facts using the rules.
 
 \subsection{Proof Trees}
 
 \begin{definition}{\bf (Proof Tree)}
-A proof tree is a pair of a set of nodes, $N$, and a set of edges $E$ where:
+A proof tree is a tuple $\langle N, E \rangle$ of a set of nodes, $N$, and a set of edges $E$ where:
 \begin{itemize}
 \item Each node $n \in N$ is a tuple, $\langle t, l\rangle$ consisting of a positive literal, $t$, (the \emph{node term}) and a label, $l \in L \cup \{initial, unprovable\}$, the \emph{node label}.
 \item $E \subseteq N \times N$, consists of ordered pairs of nodes from $N$
@@ -65,30 +66,8 @@ A proof tree is a pair of a set of nodes, $N$, and a set of edges $E$ where:
 
 
 \begin{definition}
-If $T$ is a proof tree and $N$ the set of nodes in then and $t$ is a positive literal.  Then we say $t \in T$ ($t$ is in the tree) if there exists some $l \in L \cup \{initial, unprovable\}$ such that $\langle t, l \rangle$ is a node in $T$.
+If $T$ is a proof tree, $N$ its set of nodes and $t$ is a positive literal.  Then we say $t \in T$ ($t$ is in the tree) if there exists some $l \in L \cup \{initial\}$ such that $\langle t, l \rangle$ is a node in $T$.  We say $\neg t \in T$ if $\langle t, unprovable \rangle$ is a node in $T$.
 \end{definition}
-
-\begin{definition}{\bf (Proof Tree for $F$ and $R$)}
-A \emph{proof tree}, $\pt{F}{R}$, for a set of facts, $F$, and rules, $R$ is defined recursively as follows:
-
-\begin{itemize}
-\item A node, $n = \langle t, l\rangle$, is a proof tree for $F$ and $R$ if $t \in F$, $l = initial$ and it has no outgoing edges connecting it to other nodes.
-\item A node, $n = \langle t, l\rangle$, is a proof tree for $F$ and $R$ if $l = unprovable$ and no proof tree for $F$ and $R$, $pt(F, R)$, exists such that $t \in pt(F, R)$
-\item Let ${\cal T}$ be a set of proof trees for $F$ and $R$.  
-
-If there exists a rule $\drule{l}{A}{C}$ and a substitution, $\theta$ for the free variables in $C$ such that $C\theta = t$ and for each positive literal $t' \in A$ there exists a $T \in {\cal T}$ such that $t' \in T$ and for each negative literal $\neg t' \in A$ there exists a $T \in {\cal T}$ such that $n' = \langle t'\theta, unprovable \rangle \in T$ then 
-
-a node, $n' = \langle t'\theta, l'\rangle$ which is connected to $n$ by an outgoing edge from $n$ to $n'$ (each of the antecedants of the rule is matched by a parent node for $n$) and for every node, $n' = \langle t', l'\rangle$ connected to $n$ by an outgoing edge from $n$ there exists a term $t'' \in A$ such that $t''\theta = t'$.  For each negative literal $\neg t' \in A$ there is no node $n' = \langle t'\theta, l'\rangle$ in the proof graph.
-\item For all $t \in F$, $\langle t, initial \rangle$ is in the proof graph.
-\item For all rules $\drule{l}{A}{C}$, if there exists a substitution, $\theta$, such that there exists a node $n' = \langle t'\theta, l'\rangle$ in the proof graph for every positive literal $t' \in A$ and there exists no node  $n' = \langle t'\theta, l'\rangle$ for any negative literal $\neg t' \in A$ then $\langle C\theta, l\rangle$ appears in the proof graph.
-\end{itemize}
-
-Where $G$ is a proof graph constructed as above we will say it is \emph{correct and complete with respect to $F$ and $R$}.  
-\end{definition}
-
-\louiseinline{I'm going to stop talking about substitutions, $\theta$ etc., from this point.  They make everything harder to read and I don't think they make much difference to correctness.  At some point they will have to be put back though.  For now, though, we will assume there are no variables anywhere so we can ignore them.}
-
-We say a positive literal, $t$, appears in proof graph $G$ if there exists a node in $\langle t, l\rangle \in G$. We will abuse notation and write this as $t \in G$.  Similarly, given a set of literals $S$ we will write $S \subseteq G$ if all the literals in $S$ appear in $G$. 
 
 \begin{definition}{\bf (Positive and Negative Literals in a set)}
 For a set of literals, $A$, $pos(A) = \{l: l \text{ is a positive literal } \wedge l \in A\}$ (the set of positive literals appearing in $A$).
@@ -96,16 +75,29 @@ For a set of literals, $A$, $pos(A) = \{l: l \text{ is a positive literal } \wed
 For a set of literals, $A$, $neg(A) = \{l: l \text{ is a positive literal } \wedge \neg l \in A\}$ (the set of literals appearing negatively in $A$).
 \end{definition}
 
+\begin{definition}{\bf (Proof Tree for $F$ and $R$)}
+A \emph{proof tree}, $\pt{F}{R}$, for a set of facts, $F$, and rules, $R$ is defined recursively as follows:
+
+\begin{itemize}
+\item A node, $n = \langle t, initil\rangle$, is a proof tree for $F$ and $R$ if $t \in F$ and it has no outgoing edges connecting it to other nodes.
+\item A node, $n = \langle t, unprovable\rangle$, is a proof tree for $F$ and $R$ if no proof tree for $F$ and $R$, $pt(F, R)$, exists such that $t \in pt(F, R)$
+\item Let ${\cal T} = \{T_1, \ldots, T_n\}$ be a set of proof trees for $F$ and $R$.  
+
+  If there exists a rule $\drule{l}{A}{C}$ and a substitution, $\theta$ for the free variables in $C$ such that $C\theta = t$ and for each positive literal $t' \in A$ there exists a $T_i \in {\cal T}$ such that $t' \in T_i$ and for each negative literal $\neg t' \in A$ there exists a $T_i \in {\cal T}$ such that $\neg t' \in T$ then $\langle \bigcup_i N_i \cup \{\langle C\theta, l \rangle\}, \bigcup_i E \cup E'\rangle$ where $E' = \{\langle \langle C\theta, l \rangle, \langle t', l' \rangle \rangle \mid (t \in pos(A) \wedge \exists i. \: t \in T_i) \vee (t \in neg(A) \wedge \exists i. \: \neg t \in T_i) \}$ is a proof tree for $F$ and $R$.
+
+\end{itemize}
+\end{definition}
+
+\louiseinline{I'm going to stop talking about substitutions, $\theta$ etc., from this point.  They make everything harder to read and I don't think they make much difference to correctness.  At some point they will have to be put back though.  For now, though, we will assume there are no variables anywhere so we can ignore them.}
+
+
+
 
 \section{Problem Statement}
 
 We need to formalise the idea of a disagreement between the user and the reasoning system.  We will simplify the problem to identifying a \emph{cause} of a difference between two proof graphs (this is obviously a massive simplification of why a user might want more information about a reasoning system's deduction, but it is a solid first step).
 
-\begin{definition}
-We formalise a deduction as a tuple $\langle F, R, G\rangle$ where $F$ is a set of initial facts, $R$ a set of rules and $G$ a proof graph which is correct and complete with respect to $F$ and $R$.
-\end{definition}
-
-Our problem is, given two deductions $\langle F_1, R_1, G_1\rangle \neq \langle F_2, R_2, G_2\rangle$ can we identify at least one fact, $t$ such that $t \in F_1$ and $t \not\in F_2$ (or vice versa) or at least one rule $r$ such that $r \in R_1$ and $r\not\in R_2$.  Note that we can trivially identify the differences if we have full access to $F_1$, $F_2$, $R_1$, $R_2$ etc., So our problem is whether we can find out by an incremental dialogue process where the starting information is simply one node, $n_{\mathit{diff}}$ that appears in $G_1$ and not in $G_2$ (or vice versa) and where we know no other information about the deductions.
+Our problem is, given two proof trees $\pt{F_1}{R_1} \neq \pt{F_2}{R_2}$ can we identify at least one fact, $t$ such that $t \in F_1$ and $t \not\in F_2$ (or vice versa) or at least one rule $r$ such that $r \in R_1$ and $r\not\in R_2$.  Note that we can trivially identify the differences if we have full access to $F_1$, $F_2$, $R_1$, $R_2$ etc., So our problem is whether we can find out by an incremental dialogue process where the starting information is simply one node, $n_{\mathit{diff}}$ that appears in $G_1$ and not in $G_2$ (or vice versa) and where we know no other information about the deductions.
 
 
 \section{A Dialogue}
