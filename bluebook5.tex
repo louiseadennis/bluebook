@@ -8,7 +8,7 @@
 \let\sometime=\lozenge
 \let\always=\Box
 
-\title{Sketch Proof that our Dialogue System will identify Disagreements in Reasoning}
+\title{A Dialogue System for identifying Disagreements in Deductive Reasoning}
 \author{Louise A. Dennis}
 
 \newtheorem{theorem}{Theorem}
@@ -16,7 +16,11 @@
 \newtheorem{definition}{Definition}
 
 \newcommand{\drule}[3]{\ensuremath{#1:#2 \rightarrow #3}}
-\newcommand{\pt}[2]{\ensuremath{pt(#1,#2)}}
+\newcommand{\pt}[2]{\ensuremath{\langle #1,#2 \rangle}}
+\newcommand{\intree}[2]{\ensuremath{#1 \in_t #2}}
+\newcommand{\node}[2]{\ensuremath{(#1, #2)}}
+\newcommand{\edge}[2]{\ensuremath{#1 \mapsto #2}}
+\newcommand{\deduction}[3]{\ensuremath{{\cal D}(#1, #2, #3)}}
 
 \usepackage[colorinlistoftodos]{todonotes}
 % \presetkeys%
@@ -30,302 +34,369 @@
 \begin{document}
 \maketitle
 
-Yifan, Clare and I have been working on a dialogue based system for explaining reasoning in rules-based systems.  Broadly speaking we assume the existence of a directed acyclic graph representing a chain of reasoning from some set of facts ($F$) using a set of rules ($R$) to deduce some set of conclusions ($C$).  Each node in the graph is labelled with the fact or conclusion deduced (represented as a first-order formula) and either the label \texttt{initial\_fact} indicating an initial fact or the rule that was used to deduce term labelling the node.  
+Yifan is working on a dialogue based system for explaining reasoning in rules-based systems.  We have worked through various versions of this with a Prolog implementation, starting out treating proofs as acyclic graphs with (we hoped) some kind of completeness property (i.e., the graph would capture all necessary information about the proof) and moving slowing to an idea around proof trees with Prolog-style negation as failure.
 
-When some one wants an explanation they engage in a dialogue.  They can ask \emph{why} a particular node is believed in which case they are informed that it was either an initial fact, or it was deduced from its parent nodes using the rule.  A user can also ask \emph{why not} questions -- i.e., why does some formula not appear in the reasoning graph.  In this case the system turns this around and asks them why they believe that.
+Our starting point is two ``players'' (assumed to be some deductive system and a user).  Each possesses some set of facts ($F$) and a set of rules ($R$) of the form \emph{if ...  then ...} and use these to deduce whether some conclusion, $c$, is true or false.  Deductions are represented as trees.  Each node in the tree is labelled with the fact or conclusion deduced (represented as a first-order formula) and either the label \texttt{initial} indicating an initial fact, \texttt{unprovable} meaning the fact or conclusion can not be proved (and so is deduced to be false), or the rule that was used to deduce term labelling the node. 
+
+When the players disagree about some conclusion they engage in a dialogue.  Each player can ask \emph{why} a particular node is believed in which case they are informed that it was either an initial fact, or it was deduced from its parent nodes using the rule.  A player can also ask \emph{why not} questions -- i.e., why does some conclusion is unprovable.  In this case the system turns this around and asks them why they believe that it is.
 
 The intention is that through this dialogue the user can understand either that the system did (or did not) believe some initial fact that the user does not (or does) believe or that the system and user's rules differ.
 
+Note we assume that both players reason correctly and do not consider the case where mistakes are made in the reasoning process.
+
 \begin{sloppypar}
-This note aims at trying to establish some formal properties of this process and follows the reasoning in~\cite{DennisAAMAS21}.
+This note aims at trying to establish a formal definition of the dialogue process and formal properties of that definition (particularly that it terminates with a disagreement found).  Our starting point was~\cite{DennisAAMAS21} which does something similar in the context of BDI-style reasoning.
 \end{sloppypar}
 
 \section{Preliminaries}
 We have some language of terms, ${\cal L}$, defined in a standard way.
-\louiseinline{may need to be more precise about ``in a standard way''}
 
 \begin{itemize}
-\item We have a set of labels $L$.
+\item We have a set of labels $L$ which include two special labels, $initial$ and $unprovable$. 
 
-\item We have a set of initial facts, $F$, these consist of positive literals in ${\cal L}$.
+\item We have sets of initial facts, $F$, these consist of positive literals in ${\cal L}$.
 
-\item We have a set of rules, $R$.  A rule is a horn clause consisting of a set of literals in ${\cal L}$ (the antecedants, $A$), and a consequent, a positive literal $C$, and a label $l \in L$.  We write a rule as $\drule{l}{A}{C}$. 
+\item We have sets of rules, $R$.  A rule is a horn clause consisting of a non-empty set of literals in ${\cal L}$ (the antecedants, $A$), and a consequent, a positive literal $C \in {\cal L}$ , and a label $l \in L \backslash \{initial, unprovable\}$.  We write a rule as $\drule{l}{A}{C}$.  We assume that labels in $R$ are unique -- i.e., there is only one rule labelled $l$ in any set of rules, $R$.  Note that we don't need to label rules for our system to work, but labels are a useful convenience when referring to rules.
 \end{itemize}
 
+\begin{definition}{\bf (Positive and Negative Literals in a set)}
+For a set of literals, $A$, $$pos(A) = \{l: l \text{ is a positive literal } \wedge l \in A\}$$ (the set of positive literals appearing in $A$).
+
+For a set of literals, $A$, $$neg(A) = \{l: l \text{ is a positive literal } \wedge \neg l \in A\}$$ (the set of literals appearing negatively in $A$).
+\end{definition}
 
 \subsection{Proof Trees}
 
 \begin{definition}{\bf (Proof Tree)}
-A proof tree is a pair of a set of nodes, $N$, and a set of edges $E$ where:
-\begin{itemize}
-\item Each node $n \in N$ is a tuple, $\langle t, l\rangle$ consisting of a positive literal, $t$, (the \emph{node term}) and a label, $l \in L \cup \{initial, unprovable\}$, the \emph{node label}.
-\item $E \subseteq N \times N$, consists of ordered pairs of nodes from $N$
-\end{itemize}
+\label{def:proof_tree}
+A proof tree is a directed rooted tree written $\pt{N}{E}$, where $N$ is the set of nodes in the tree, and $E \subseteq N \times N$ is the set of edges.  Each node $n \in N$ consists of a pair of a ground positive literal, $t \in {\cal L}$ and a label, $l \in L$ written $\node{t}{l}$.  An edge between two nodes $n_1$ and $n_2$ is written as $\edge{n_1}{n_2}$.
+
+We use standard terminology so the root of a proof tree is the single node, $n$ such that there is no edge $\edge{n'}{n}$.  A node, $n$'s, parent nodes are the set of nodes, $n'$, such that there exists an edge $\edge{n}{n'}$.  A node, $n$'s, parent trees are the set of sub-trees with a parent of $n$ as their root.
+
+If $\node{t}{l}$ is the root node of a tree, then we refer to $t$ as the \emph{root term} of the tree.
 \end{definition}
 
-
-\begin{definition}
-If $T$ is a proof tree and $N$ the set of nodes in then and $t$ is a positive literal.  Then we say $t \in T$ ($t$ is in the tree) if there exists some $l \in L \cup \{initial, unprovable\}$ such that $\langle t, l \rangle$ is a node in $T$.
+\begin{definition}{\bf Provable and Unprovable in $T$}
+If $\langle N, E \rangle = T$ is a proof tree and $t$ is a ground positive literal in ${\cal L}$.  We say:
+\begin{itemize}
+\item $t$ is \emph{provable} in $T$ iff there exists a node $\node{t}{l} \in N$ such that $l \neq unprovable$.
+\item $t$ is \emph{unprovable} in $T$ iff $\node{t}{unprovable} \in N$.
+\item $t$ is \emph{undecided} in $T$ iff there is no node $\node{t}{l} \in N$.
+\end{itemize}
+%% Note that because the definition of a proof tree states that for any ground positive literal, $t$, there is at most one node $\node{t}{l} \in N$ it is not possible for a term to be both provable and unprovable in any proof tree.
 \end{definition}
 
 \begin{definition}{\bf (Proof Tree for $F$ and $R$)}
-A \emph{proof tree}, $\pt{F}{R}$, for a set of facts, $F$, and rules, $R$ is defined recursively as follows:
+A \emph{proof tree}, $T$, for a set of facts, $F$, and rules, $R$ is defined recursively as follows:
 
 \begin{itemize}
-\item A node, $n = \langle t, l\rangle$, is a proof tree for $F$ and $R$ if $t \in F$, $l = initial$ and it has no outgoing edges connecting it to other nodes.
-\item A node, $n = \langle t, l\rangle$, is a proof tree for $F$ and $R$ if $l = unprovable$ and no proof tree for $F$ and $R$, $pt(F, R)$, exists such that $t \in pt(F, R)$
-\item Let ${\cal T}$ be a set of proof trees for $F$ and $R$.  
+\item $\pt{\{\node{t}{initial}\}}{\emptyset}$ is proof tree for $F$ and $R$ iff $t \in F$
+\item $\pt{\{\node{t}{unprovable} \}}{\emptyset}$, is a proof tree for $F$ and $R$ iff no proof tree, $T'$, for $F$ and $R$ exists such that $t$ is provable in $T'$
+\item If $E \neq \emptyset$ then a proof tree $T = \pt{N}{E}$ with root node $\node{t}{l}$ is a proof tree for $F$ and $R$ iff:
 
-If there exists a rule $\drule{l}{A}{C}$ and a substitution, $\theta$ for the free variables in $C$ such that $C\theta = t$ and for each positive literal $t' \in A$ there exists a $T \in {\cal T}$ such that $t' \in T$ and for each negative literal $\neg t' \in A$ there exists a $T \in {\cal T}$ such that $n' = \langle t'\theta, unprovable \rangle \in T$ then 
-
-a node, $n' = \langle t'\theta, l'\rangle$ which is connected to $n$ by an outgoing edge from $n$ to $n'$ (each of the antecedants of the rule is matched by a parent node for $n$) and for every node, $n' = \langle t', l'\rangle$ connected to $n$ by an outgoing edge from $n$ there exists a term $t'' \in A$ such that $t''\theta = t'$.  For each negative literal $\neg t' \in A$ there is no node $n' = \langle t'\theta, l'\rangle$ in the proof graph.
-\item For all $t \in F$, $\langle t, initial \rangle$ is in the proof graph.
-\item For all rules $\drule{l}{A}{C}$, if there exists a substitution, $\theta$, such that there exists a node $n' = \langle t'\theta, l'\rangle$ in the proof graph for every positive literal $t' \in A$ and there exists no node  $n' = \langle t'\theta, l'\rangle$ for any negative literal $\neg t' \in A$ then $\langle C\theta, l\rangle$ appears in the proof graph.
+\begin{itemize}
+\item The parent trees of $\node{t}{l}$ are all proof trees for $F$ and $R$
+\item There exists a rule, $\drule{l}{A}{C} \in R$ and a substitution, $\theta$ for the free variables in $A$ and $C$ such that $C\theta = t$ and $t \not\in F$.
+\item If $\node{t'}{l'}$ is a parent of $\node{t}{l}$ in $T$ then either 
+\begin{itemize} 
+\item $\exists t_i \in pos(A). \: t_i\theta = t'$ and $l' \neq unprovable$ or, 
+\item $\exists t_i \in neg(A).  \: t_i\theta = t'$ and $l' = unprovable$.
 \end{itemize}
-
-Where $G$ is a proof graph constructed as above we will say it is \emph{correct and complete with respect to $F$ and $R$}.  
+\item For all $t'$ such that $t' \in A\theta$ there exists a unique label, $l'$ such that $\node{t'}{l'}$ is a parent node of $\node{t}{l}$ in $T$.  Note that because $A \neq \emptyset$ this means that if any proof tree, $T$, for $F$ and $R$ that contains a node $\node{t}{l}$ where $l \not\in \{initial,unprovable\}$ contains more than one node and at least one edge.
+\end{itemize}
+\end{itemize}
 \end{definition}
 
-\louiseinline{I'm going to stop talking about substitutions, $\theta$ etc., from this point.  They make everything harder to read and I don't think they make much difference to correctness.  At some point they will have to be put back though.  For now, though, we will assume there are no variables anywhere so we can ignore them.}
+We note (though we don't prove) that a proof tree with some statement $t$ at its root (either as a provable or unprovable statement) can be constructed from $F$ and $R$ by standard backwards reasoning in a Prolog style.
 
-We say a positive literal, $t$, appears in proof graph $G$ if there exists a node in $\langle t, l\rangle \in G$. We will abuse notation and write this as $t \in G$.  Similarly, given a set of literals $S$ we will write $S \subseteq G$ if all the literals in $S$ appear in $G$. 
+I'm going to stop talking about substitutions, $\theta$ etc., from this point.  They make everything harder to read and I don't think they make much difference to correctness.  
 
-\begin{definition}{\bf (Positive and Negative Literals in a set)}
-For a set of literals, $A$, $pos(A) = \{l: l \text{ is a positive literal } \wedge l \in A\}$ (the set of positive literals appearing in $A$).
+We will also assume that we are only dealing with sets of facts and rules that always terminate when attempting to find a proof tree with some term $t$ as the root.
 
-For a set of literals, $A$, $neg(A) = \{l: l \text{ is a positive literal } \wedge \neg l \in A\}$ (the set of literals appearing negatively in $A$).
-\end{definition}
-
-
+\begin{theorem}
+\label{thm:unprovable}
+If there exists a proof tree, $T$, for $F$ and $R$ and a term $t$ which is unprovable in $T$ then there is no proof tree for $F$ and $R$ in which $t$ is provable.
+\end{theorem}
+\begin{proof}
+This is a very simple proof by induction.  In the base case, if $t$ is unprovable in $T$ then $T = \pt{\{\node{t}{unprovable} \}}{\emptyset}$ and there is no proof tree for $F$ and $R$ in which $t$ is provable by definition.  In the step case $t$ is unprovable in some $T$ with root node $\node{t}{l}$ where $\drule{l}{A}{C} \in R$.  Since no rule is labelled $unprovable$ by definition, $t$ must be unprovable in one of the sub-trees of $T$ and so, by the induction hypothesis, there is no proof tree for $F$ and $R$ in which $t$ is provable.
+\end{proof}
+\begin{theorem}
+\label{thm:rules}
+If there exists a proof tree, $\pt{N}{E}$, for $F$ and $R$ and a node $\node{t}{l} \in N$ where $l \not\in \{initial,unprovable\}$ then there exists a rule $\drule{l}{A}{C} \in R$.
+\end{theorem}
+\begin{proof}
+Again this is a very simple proof by induction.  In the base case single node trees are labelled with either $initial$ or $unprovable$ so the theorem is trivially true.  Otherwise in the step case, if the root of the tree is the $\node{t}{l}$ then there exists a rule, $\drule{l}{A}{C} \in R$ by definition otherwise $\node{t}{l}$ is in one of the sub-trees and the existence of a rule $\drule{l}{A}{C} \in R$  follows from the induction hypothesis.
+\end{proof}
 \section{Problem Statement}
 
-We need to formalise the idea of a disagreement between the user and the reasoning system.  We will simplify the problem to identifying a \emph{cause} of a difference between two proof graphs (this is obviously a massive simplification of why a user might want more information about a reasoning system's deduction, but it is a solid first step).
+We need to formalise the idea of a disagreement between the user and the reasoning system.  We will simplify the problem to identifying a \emph{cause} of a difference between two proof trees (this is obviously a massive simplification of why a user might want more information about a reasoning system's deduction, but it is a solid first step).
 
 \begin{definition}
-We formalise a deduction as a tuple $\langle F, R, G\rangle$ where $F$ is a set of initial facts, $R$ a set of rules and $G$ a proof graph which is correct and complete with respect to $F$ and $R$.
+We formalise a deduction as a tuple $\deduction{F}{R}{{\cal  T}}$ where $F$ is a set of initial facts, $R$ a set of rules and ${\cal T}$ is a set of proof trees for $F$ and $R$.  We will refer to $F$ as the \emph{deduction facts}, $R$ as the \emph{deduction rules} and ${\cal T}$ as the \emph{deduction trees}.
 \end{definition}
 
-Our problem is, given two deductions $\langle F_1, R_1, G_1\rangle \neq \langle F_2, R_2, G_2\rangle$ can we identify at least one fact, $t$ such that $t \in F_1$ and $t \not\in F_2$ (or vice versa) or at least one rule $r$ such that $r \in R_1$ and $r\not\in R_2$.  Note that we can trivially identify the differences if we have full access to $F_1$, $F_2$, $R_1$, $R_2$ etc., So our problem is whether we can find out by an incremental dialogue process where the starting information is simply one node, $n_{\mathit{diff}}$ that appears in $G_1$ and not in $G_2$ (or vice versa) and where we know no other information about the deductions.
-
+Our problem is, given two initial deductions $\deduction{F_1}{R_1}{\{T_1\}} \neq \deduction{F_2}{R_2}{\{T_2\}}$ such that $T_1$ and $T_2$ have the same root term but that root term is provable in one and unprovable in the other, can we identify at least one fact, $t$ such that $t \in F_1$ and $t \not\in F_2$ (or vice versa) or at least one rule $r$ such that $r \in R_1$ and $r\not\in R_2$.  Note that we can trivially identify the differences if we have full access to $F_1$, $F_2$, $R_1$, $R_2$ etc., So our problem is whether we can find out by an incremental dialogue process where the starting information is simply a root term that is provable in one deduction tree and not in the other.  We assume that rules with the same label in $R_1$ and $R_2$ are identical -- i.e., if $\drule{l}{A_1}{C_1} \in R_1$ and $\drule{l}{A_2}{C_2} \in R_2$ then $A_1 = A_2$ and $C_1 = C_2$.  This means we can use rule labels as proxies for the rules themselves rather than having to match antecedants and consequents.
 
 \section{A Dialogue}
 
-A dialogue is a sequence of moves taken by two players.  $P_1$ knows all the information in $\langle F_1, R_1, G_1\rangle$ while $P_2$ knows all the information in $\langle F_2, R_2, G_2\rangle$.  The two players gradually build up a model of how the other player has reasoned.  This model consists of four sets $Y_{ij}$, $F_{ij}$, $N_{ij}$ and $YR_{ij}$:
+A dialogue is a sequence of moves taken by two players.  $P_1$ knows all the information in $D^1_0 = \deduction{F_1}{R_1}{\{T_1\}}$ while $P_2$ knows all the information in $D^2_0 = \deduction{F_2}{R_2}{\{T_2\}}$.  The two players gradually build up a model of how the other player has reasoned.  This model consists of four sets $Y_{ij}$, $F_{ij}$, $N_{ij}$ and $YR_{ij}$: 
 \begin{itemize}
-\item $Y_{ij}$ consists of terms $t$ that $P_i$ has established that $P_j$ believes to be true
+\item $Y_{ij}$ consists of terms $t$ that $P_i$ has established that $P_j$ believes to be true.  We refer to $Y_{ij}$ as the \emph{opponent belief set}.
 \item $F_{ij}$ consists of terms $t$ that $P_i$ has established that $P_j$ had as an initial fact.  Note that $F_{ij} 
-\subseteq Y_{ij}$.
-\item$N_{ij}$ consists of terms $t$ that $P_i$ has established that $P_j$ does not believe to be true.
-\item $YR_{ij}$ consists of rule labels $l$ that $P_i$ has established label on of $P_j$'s rules. 
+\subseteq Y_{ij}$.  We refer to $F_{ij}$ as the \emph{opponent fact set}.
+\item$N_{ij}$ consists of terms $t$ that $P_i$ has established that $P_j$ does not believe to be true.  We refer to $N_{ij}$ as the \emph{opponent disbelief set}.
+\item $YR_{ij}$ consists of rule labels $l$ that $P_i$ has established label on of $P_j$'s rules.  We refer to $YR_{ij}$ as sthe \emph{opponent rule set}.
 \end{itemize}
+At the same time they may need to add additional proof trees to their deduction trees in response to questions asked by the other player.
 
-
-The starting point for the dialogue is a term $t$ which, for the sake of argument, we'll say appears in $G_2$ and not in $G_1$.  So $t$ is something one of them has deduced and the other hasn't.  We don't worry at this point about how the players have established this initial disagreement.
-
-\begin{definition}
-The state of player $i$ at statement $t$ in a dialogue with player $j$ is $S^i_t = \langle \langle F_i, R_i, G_i \rangle, Y_{ij}, F_{ij}, N_{ij}, YR_{ij} \rangle$.  
-\end{definition}
-
-The initial state of a player 1 above is, $S^1_0 = \langle \langle F_1, R_1, G_1 \rangle, \{t\}, \emptyset, \emptyset, \emptyset \rangle$ (player 1 knows Player 2 believes $t$ but doesn't know anything else about their state) and the initial state of player 2 is $S^2_0 = \langle \langle F_2, R_2, G_2 \rangle, \emptyset, \emptyset, \{t\}, \emptyset \rangle$ (player 2 knows player 1 doesn't believe $t$ but doesn't know anything else about them).  Either player can start the dialogue.
-
-
-At each stage in the dialogue a player may make one of six statements:  
+There are six possible statements that can be made in the course of a dialogue:
 \begin{enumerate}
 \item $\mathit{different\_fact(t, i, j)}$ -- $i$ has $t$ as an initial fact and $j$ does not.
 \item $\mathit{different\_rule(\drule{l}{A}{C}, i, j)}$ -- $i$ has $\drule{l}{A}{C}$ as a rule and $j$ does not.
 \item $initial(t)$ -- $t$ is an initial fact for the Player.
-\item $\drule{l}{a}{t}$ -- the player deduced $t$ from the terms in $A$ using the rule labelled $l$
+\item $\drule{l}{a}{t}$ -- the player deduced $t$ from the terms in $a$ using the rule labelled $l$
 \item $why(t)$ - why do you believe $t$?
 \item $whynot(t)$ -- why don't you believe $t$
 \end{enumerate}
 The first two statements terminate the dialogue.
 
+
+The starting point for the dialogue is the root term $t$ of $T_1$ and $T_2$ which, for the sake of argument, we'll say is provable in $T_2$ and unprovable in $T_1$.  So $t$ is something one of them has deduced and the other hasn't.  We don't worry at this point about how the players have established this initial disagreement.  
+
+\begin{sloppypar}
+\begin{definition}{\bf (Player State)}
+The \emph{state} of player $i$ at statement $k$ in a dialogue with player $j$ is $S^i_k = \langle  D_i, Y_{ij}, F_{ij}, N_{ij}, YR_{ij} \rangle$ where $D_i$ is a deduction (referred to as $i$'s deduction), and $Y_{ij}, F_{ij}, N_{ij}, YR_{ij}$ are sets of terms representing $i$'s opponent belief set, fact, set, disbelief set and rule set respectively.
+\end{definition}
+
+\begin{definition}{\bf (Initial Player State)}
+The initial state of  Player $i$ in a dialogue is ether $\langle \deduction{F_i}{R_i}{\{\pt{\node{t}{unprovable}}{\emptyset}\}}, \{t\}, \emptyset, \emptyset, \emptyset \rangle$ or  $\langle \deduction{F_i}{R_i}{\{T_i\}}, \emptyset, \emptyset, \{t\}, \emptyset \rangle$ where $t$ is the root term of $T_i$.
+\end{definition}
+\end{sloppypar}
+
+
+
 \begin{definition}{\bf (Dialogue State)}
-$S_{t}$ is the state of the dialogue after the utterance of the $t$th statement. It consists of the two player states, the last dialogue statement, $stmt$, and whose turn it is $i$.  $S_{t} = \langle S^1_{t}, S^2_{t}, stmt, i \rangle$
+$S_{k}$ is the state of the dialogue after the utterance of the $k$th statement. It consists of the two player states, the last dialogue statement, $stmt$, and whose turn it is $i$.  $S_{k} = \langle S^1_{k}, S^2_{k}, stmt, i \rangle$
 \end{definition}
 
 \begin{definition}{\bf (Dialogue)}
 A dialogue is a sequence of dialogue states $S_0, \ldots, S_n$.
-If $S_k = \langle S^1_{k}, S^2_{k}, stmt_k, i_k\rangle$ is the state of a dialogue at utterance $k$ then $S_{k+1} = \langle S^1_{k}, S^2_{k}, stmt_{k + 1}, i_{k + 1}\rangle$ is a legal next state in the dialogue if:
+
+$S_0 = \langle S^1_0, S^2_0, stmt_0, i \rangle$ where $S^1_0 = \langle D^1_0, \{t\}, \emptyset, \emptyset, \emptyset \rangle$ is an initial player state, $S^2_0 = \langle D^2_0, \emptyset, \emptyset, \{t\}, \emptyset \rangle$ is an initial player state, and either $i = 1$ and $stmt_0 = whynot(t)$ (Player 2 started the dialogue by asking Player 1 why they don't believe $t$ and it is now Player 1's turn) or $i = 2$ and $stmt_0 = why(t)$ (Player 1 started the dialogue by asking Player 2 why they believe $t$ and it is now Player 2's turn). 
+
+If $S_k = \langle S^1_{k}, S^2_{k}, stmt_k, i_k\rangle$ is the state of a dialogue at utterance $k$ then $S_{k+1} = \langle S^1_{k + 1}, S^2_{k + 1}, stmt_{k + 1}, i_{k + 1}\rangle$ is a legal next state in the dialogue if the individual parts of the state are as follows:
 
 \begin{itemize}
 
-\item  {\bf ($S^i_{k+1}$) where $i = i_k$} Recall that $S^i_k =  \langle F_i, R_i, G_i \rangle, Y_{ij}, F_{ij}, N_{ij}, YR_{ij} \rangle$
+\item  {\bf ($S^i_{k+1}$ where $i = i_k$)} Recall that $S^i_k =  \langle D_i, Y_{ij}, F_{ij}, N_{ij}, YR_{ij} \rangle$
 \begin{enumerate}
-\item If $stmt = initial(t)$ then $S^i_{k+1}= \langle F_i, R_i, G_i \rangle, Y_{ij} \cup \{t\}, F_{ij} \cup \{t\}, N_{ij}, YR_{ij} \rangle$ 
+\item If $stmt_k = initial(t)$ then $S^i_{k+1}= \langle D_i, Y_{ij} \cup \{t\}, F_{ij} \cup \{t\}, N_{ij}, YR_{ij} \rangle$ 
 ($P_i$ adds $t$ to $Y_{ij}$ and $F_{ij}$).  
-\item If $s = \drule{l}{a}{t}$ and $l  \in R_i$ then $S^i_{k + 1} = \langle F_i, R_i, G_i \rangle, Y_{ij} \cup pos(a), F_{ij}, N_{ij} \cup neg(a), YR_{ij} \cup \{l\} \rangle$
+\item If $stmt_k = \drule{l}{a}{t}$ and $l  \in R_i$ then $S^i_{k + 1} = \langle D_i, Y_{ij} \cup pos(a), F_{ij}, N_{ij} \cup neg(a), YR_{ij} \cup \{l\} \rangle$
 ($P_i$ adds all the positive literals in $a$ to $Y_{ij}$ (these are things the other player believes) and all the negative literals in $a$ to $N_{ij}$ (these are all the things the other player does not believe) and adds $l$ to $YR_{ij}$ -- this is a rule the other player has). 
-\item If $s = why(t)$ then $S^i_{k + 1} = \langle F_i, R_i, G_i \rangle, Y_{ij}  , F_{ij}, N_{ij} \cup \{t\}, YR_{ij} \rangle$ ($P_i$ adds $t$ to $N_{ij}$ (the other player doesn't believe $t$)). 
-\item If $s = whynot(t)$ then $S^i_{k + 1} = \langle F_i, R_i, G_i \rangle, Y_{ij} \cup \{t\}, F_{ij}, N_{ij} , YR_{ij} \rangle$  ($P_i$ adds $t$ to $Y_{ij}$ (the other player believes $t$)). 
+\item If $stmt_k = why(t)$ and $t$ is provable in one of the deduction trees in $D_i$ then $S^i_{k + 1} = \langle D_i, Y_{ij}  , F_{ij}, N_{ij} \cup \{t\}, YR_{ij} \rangle$ ($P_i$ adds $t$ to $N_{ij}$ (the other player doesn't believe $t$)). 
+\item If $stmt_k = why(t)$, $D_i = \deduction{F_i}{R_i}{{\cal T}}$ and $t$ is undecided in all the proof trees in ${\cal T}$, and there exists a proof tree for $F_i$ and $R_i$ in which $t$ is provable then $P_i$ generates a new proof tree for $F_i$ and $R_i$, $T$, with $t$ as its root term and  $S^i_{k + 1} = \langle \deduction{F_i}{R_i}{{\cal T} \cup T}, Y_{ij}  , F_{ij}, N_{ij} \cup \{t\}, YR_{ij} \rangle$ ($P_i$ adds $t$ to $N_{ij}$ (the other player doesn't believe $t$) at the same time $P_i$ generates a deduction as evidence for why it believes $t$). 
+\item If $stmt_k = why(t)$, $D_i = \deduction{F_i}{R_i}{{\cal T}}$ and $\langle \{\node{t}{unprovable}\}, \emptyset \rangle$ is a proof tree for $F_i$ and $R_i$ then  $S^i_{k + 1} = \epsilon$ and the dialogue terminates in an error state (This state should not occur in a legal dialogue -- $P_i$ has been asked why it thinks something is true when in fact $P_i$ thinks it is false).
+\item If $stmt_k = whynot(t)$, $D_i = \deduction{F_i}{R_i}{{\cal T}}$ and $t$ is unprovable in some proof tree in ${\cal T}$ then $S^i_{k + 1} = \langle D_i, Y_{ij} \cup \{t\}, F_{ij}, N_{ij} , YR_{ij} \rangle$  ($P_i$ adds $t$ to $Y_{ij}$ (the other player believes $t$)). 
+\item If $stmt_k = whynot(t)$, $D_i = \deduction{F_i}{R_i}{{\cal T}}$, $t$ is undecided in all the proof trees in ${\cal T}$ or $t$ is provable in some proof tree in ${\cal T}$ then  $S^i_{k + 1} = \epsilon$ and the dialogue terminates in an error state (This state should not occur in a legal dialogue -- $P_i$ has been asked why it thinks something is false when in fact $P_i$ thinks it is true or has never tried to prove it).
 \end{enumerate}
 
-\item {\bf ($S^j_{k+1}$ where $j \in \{1, 2\} \wedge j \neq i_k$)} $S^j_{k+1} = S^j_{k}$ (the state of the player who's turn it is not, is unchanged at the next state in the dialogue)
+\item {\bf ($S^j_{k+1}$ where $j \neq i_k$)} $S^j_{k+1} = S^j_{k}$ (the state of the player who's turn it is not, is unchanged at the next state in the dialogue)
 
-\item {\bf ($stmt_{k+1}$)} (Legal  moves for player $P_{i_k}$ in their turn in the dialogue)
+\item {\bf ($stmt_{k+1}$)} (Legal  moves for player $P_{i_k}$ in their turn in the dialogue). In what follows $D_{i_k} = \deduction{F_{i_k}}{R_{i_k}}{{\cal  T}_{i_k}}$.
 
 \begin{enumerate}
-\item If $stmt_{k + 1} = initial(t)$ then $stmt_{k} = why(t)$ and $t \in F_{i_k}$.
-\item If $stmt_{k + 1} = \drule{l}{A}{t}$ then $stmt_{k} = why(t)$, $t \not\in F_{i_k}$ and for some node $n = \langle t, l\rangle \in G_{i_k}$ and $A$ are the terms for $n$'s parent nodes.
-\item If $stmt_{k + 1} = why(t)$ then $stmt_{k} =  whynot(t)$.
-\item If $stmt_{k + 1} = whynot(t)$ then $stmt_{k} \neq why(t)$, $\forall l. l \leq k \rightarrow stmt_{l} \neq whynot(t)$ (this question has not been asked before) and $t \in G_{i_k} \cap N_{{i_k}j}$ (Player ${i_k}$ identifies a term $t$ that it believes and it has established the other doesn't  and asks why not).
-\item If $stmt_{k + 1} = why(t)$ then $\forall l. l \leq k \rightarrow stmt_{l} \neq why(t)$ (this question has not been asked before), $stmt_{k} \neq whynot(t)$ and $t \in Y_{{i_k}j}\backslash G_{i_k}$ (Player ${i_k}$ identifies a term $t$ that it does not believe and it has established the other does  and asks why).
-\item If $stmt_{k + 1} = \mathit{different\_fact}(t, j, {i_k})$ then $t \in F_{{i_k}j}$ and $t \not\in F_{i_k}$ (Player ${i_k}$ has identified that $t$ was an initial fact for Player $j$ but not for Player ${i_k}$)
-\item If $stmt_{k + 1} = \mathit{different\_fact}(t, {i_k}, j)$ then $t \in N_{{i_k}j}$ and $t \in F_{i_k}$ (Player ${i_k}$ has identified that $t$ was an initial fact for Player ${i_k}$ but not for Player $j$)
-\item If $stmt_{k+1} = \mathit{different\_rule}(l, j, {i_k})$ then $l \in YR_{{i_k}j}$ and $l \not\in R_{i_k}$ (Player ${i_k}$ has identified that $l$ is a rule for  Player $j$ but not for Player ${i_k}$)
+\item $stmt_{k + 1} = initial(t)$ is legal iff $stmt_{k} = why(t)$ and $t \in F_{i_k}$
+\item $stmt_{k + 1} = \drule{l}{a}{t}$ is legal iff:
+\begin{itemize}
+\item$stmt_{k} = why(t)$, 
+\item $t \not\in F_{i_k}$,
+\item there exists a proof tree $\langle N, E\rangle \in {\cal T}_{i_k}$ such that $\node{t}{l} \in N$
+% \item For every literal  $t_i \in A$ there exists a node $\node{t_i}{l_i} \in N$ such that $\edge{\node{t}{l}}{\node{t_i}{l_i}} \in E$
+% \item If $t_i \in pos(A)$ then it is provable in $\langle N, E \rangle$ 
+% \item If $t_i \in neg(A)$ then it is unprovable in $\langle N, E \rangle$
+\end{itemize}
+\item $stmt_{k + 1} = whynot(t)$ is legal iff 
+\begin{itemize}
+\item $stmt_{k} \neq why(t)$
+\item $\forall l. l \leq k \rightarrow stmt_{l} \neq whynot(t)$ (this question has not been asked before)
+\item there exists a $T \in {\cal T}_{i_k}$ such that $t$ is provable in $T$
+\item $t \in N_{{i_k}j}$  (Player ${i_k}$ identifies a term $t$ that it believes and it has established the other doesn't  and asks why not).
+\end{itemize}
+\item $stmt_{k + 1} = why(t)$ is legal if $stmt_{k} =  whynot(t)$.
+\item $stmt_{k + 1} = why(t)$ is legal if 
+\begin{itemize}
+\item $stmt_{k} \neq whynot(t)$,
+\item $\forall l. l \leq k \rightarrow stmt_{l} \neq why(t)$ (this question has not been asked before)
+\item there exists a $T \in {\cal T}_{i_k}$ such that $t$ is unprovable in $T$ and,
+\item $t \in Y_{{i_k}j}$  (Player ${i_k}$ identifies a term $t$ that it does not believe and it has established the other does  and asks why).
+\end{itemize}
+\item $stmt_{k + 1} = \mathit{different\_fact}(t, j, {i_k})$ is legal iff $t \in F_{{i_k}j}$ and $t \not\in F_{i_k}$ (Player ${i_k}$ has identified that $t$ was an initial fact for Player $j$ but not for Player ${i_k}$)
+\item $stmt_{k + 1} = \mathit{different\_fact}(t, {i_k}, j)$ is legal iff  $t \in N_{{i_k}j}$ and $t \in F_{i_k}$  (Player ${i_k}$ has identified that $t$ was an initial fact for Player ${i_k}$ but not for Player $j$)
+\item $stmt_{k+1} = \mathit{different\_rule}(l, j, {i_k})$ is legal iff $l \in YR_{{i_k}j}$ and there is no rule $\drule{l}{A}{C} \in R_{i_k}$ (Player ${i_k}$ has identified that $l$ is a rule for  Player $j$ but not for Player ${i_k}$)
+\item no other statements are legal.
 \end{enumerate}
 \item {\bf ($i_{k+1}$)} $i_{k + 1} \in \{1, 2\}$ and $i_{k + 1} \neq i_k$.  (Next player's turn).
 \end{itemize}
 \end{definition}
 
-\louiseinline{I think we are going to have to implement all the above for the computer player -- i.e., it's going to have to maintain sets of what the user does and doesn't believe.  We are probably going to have to use this also to generate possible answers for the human user in some way - though given the computer won't know their $F$ and $R$ we may need to provide them with possible moves that are not legal.}
+Note that there are some situations where several responses are legal in which case the player may select one.  At a later date we may look at heuristics for selecting responses.
 
 \section{Proofs}
 
 \begin{lemma}
 \label{lem:initial}
-If the current state of a dialogue is $\langle S^1_{stmt}, S^2_{stmt}, initial(t), i \rangle$ then $t \in F_j$ and $t \in G_j$.
+If the current state of a dialogue is $\langle S^1_{k}, S^2_{k}, initial(t), i \rangle$,  $i \neq j$ and $\deduction{F_j}{R_j}{{\cal T}_j}$ then  $t \in F_j$ where $F_j$ and $t$ is provable in some $T \in {\cal T}_j$.% and $t$ is provable in $T_j$ where $j$'s deduction is $\langle F_j, R_j, T_j \rangle$.
 \end{lemma}
 \begin{proof}
-If it is player $i$'s turn then $initial(t)$ was uttered by player $j$.  This could only be uttered if $t \in F_j$.  Because $t \in F_j \rightarrow t \in G_j$  then $t \in G_j$.
+If it is player $i$'s turn then $initial(t)$ was uttered by player $j$.  This could only be uttered if $t \in F_j$.  
+
+Morever suppose $\deduction{F_j}{R_j}{{\cal T}_j'}$ were $j$'s deduction in the previous state. If $t$ is provable in some $T \in {\cal T}_j'$ then ${\cal T}_j = {\cal T}_j'$ and so $t$ is provable in some $T \in {\cal T}_j$.  If $t$ were undecided in all proof trees in ${\cal T}_j'$ then because a proof tree for $F_j$ and $R_j$ exists with $t$ as its root (namely $T = \pt{\{\node{t}{initial}\}}{\emptyset}$) then ${\cal T}_j = {\cal T}_j' \cup \{T\}$ so  $t$ is provable in some $T \in {\cal T}_j$.% Because $t \in F_j \rightarrow \intree{t \in T_j$  then $t \in G_j$.
 \end{proof}
 \begin{lemma}
 \label{lem:drule}
-If the current state of a dialogue is $\langle S^1_{stmt}, S^2_{stmt}, \drule{l}{a}{t}, i \rangle$ then $pos(a) \subseteq G_j$ and $neg(a) \cap G_j = \emptyset$ and $l \in R_j$.
+If the current state of a dialogue is $\langle S^1_{k}, S^2_{k}, \drule{l}{a}{t}, i \rangle$, $i \neq j$ and $\deduction{F_j}{R_j}{{\cal T}_j}$ is $j$'s current deduction then there exists at least one proof tree, $T_j \in {\cal T}_j$  such that $\node{t}{l}$ is a node in $T_j$ , $\drule{l}{a}{t} \in R_j$ and for all $t\in pos(a)$, $t$ is provable in $T_j$; for all $t \in neg(a)$  then $t$ is unprovable $T_j$; and $l \in R_j$.
 \end{lemma}
 \begin{proof}
-If it is player $i$'s turn then $\drule{l}{a}{t}$ was uttered by player $j$.  This could only be uttered if $n = \langle t, l \rangle \in G_j$ and $pos(a)$ are the terms in $n$'s parents nodes $pos(a) \subseteq G_j$ and for any literal in $t \in neg(a)$ appears in no node in the graph, so $neg(a) \cap G_j = \emptyset$ and $l \in R_j$ (by the definition of a correct proof graph).
-\end{proof}
-\begin{lemma}
-\label{lem:why}
-If the current state of a dialogue is $\langle S^1_{stmt}, S^2_{stmt}, why(t), i \rangle$ then $t \not\in G_j$.
-\end{lemma}
-\begin{proof}
-If it is player $i$'s turn then $why(t)$ was uttered by player $j$.  This could only be uttered if $t \in Y_{ji} \backslash G_j$ therefore $t \not\in G_j$.
+If it is player $i$'s turn then $\drule{l}{a}{t}$ was uttered by player $j$.  This could only be uttered if $n = \langle t, l \rangle \in N$ for some proof tree $\pt{N}{E} \in {\cal T}_j$.  The rest follows from the definition of a proof tree for $F_j$ and $R_j$.
 \end{proof}
 \begin{lemma}
 \label{lem:whynot}
-If the current state of a dialogue is $\langle S^1_{stmt}, S^2_{stmt}, whynot(t), i \rangle$ then $t \in G_j$.
+If the current state of a dialogue is $\langle S^1_{stmt}, S^2_{stmt}, whynot(t), i \rangle$, $i \neq j$ and $\deduction{F_j}{R_j}{{\cal T}_j}$ is $j$'s current deduction then $t$ is provable in some $T \in {\cal T}_j$.
 \end{lemma}
 \begin{proof}
-If it is player $i$'s turn then $whynot(t)$ was uttered by player $j$.  This could only be uttered if $t \in N_{ji} \cup G_j$ therefore $t \in G_j$.
+If it is player $i$'s turn then $whynot(t)$ was uttered by player $j$.  Either this was the opening statement of the dialogue in which case $t$ is the root node of the only proof tree in ${\cal T}_j$.  Otherwise this could only be uttered if there exists a $T \in {\cal T}_j$ such that $t$ is provable in $T$.
 \end{proof}
 
-\paragraph{State updates are correct} From those we need to establish a set of proofs that for instance $t \in F_{ij}$ iff $t \in F_j$ (i.e., player $i$ only decides player $j$ has $t$ as an initial fact if player $j$ does indeed have $j$ as an initial fact).  The same for $Y_{ij}$, $N_{ij}$ etc. etc.  This involves going through the statements $j$ can make that will lead to $i$ updating those steps.
+The equivalent lemma to the above for $why(t)$ is a corollary of the following theoarem.
+
+\paragraph{State updates are correct} We need to establish athat for instance $t \in F_{ij}$ iff $t \in F_j$ (i.e., player $i$ only decides player $j$ has $t$ as an initial fact if player $j$ does indeed have $j$ as an initial fact).  The same for $Y_{ij}$, $N_{ij}$ etc. etc.  This involves going through the statements $j$ can make that will lead to $i$ updating those states.  We also want to show that the error states $\epsilon$ never occur.
 
 \begin{theorem}
-Given two dialogue participants $i$ and $j$, $F_{ij} \subseteq F_j$.  That is $i$'s model of $j$'s initial facts is a subset of $j$ actual initial facts.
+Given two dialogue participants $i$ and $j$, where $\deduction{F_j}{R_j}{{\cal T}_j}$ is $j$'s deduction and $F_{ij}$ is $i$'s opponent fact set, $F_{ij} \subseteq F_j$.  That is $i$'s model of $j$'s initial facts is a subset of $j$'s actual initial facts.
 \end{theorem}
 \begin{proof}
 We will argue by induction considering each time something is added to $F_{ij}$.
 
-{\bf base case}.  In the initial state of the dialogue $F_{ij} = \emptyset$ therefore $F_{ij} \subseteq F_j$.
+{\bf Base case}.  In the initial state of the dialogue $F_{ij} = \emptyset$ therefore $F_{ij} \subseteq F_j$.
 
-{\bf step case}.  A term $t$ is added to $F_{ij}$ when the previous utterance $stmt = initial(t)$.  From Lemma~\ref{lem:initial} we know that in this case $t \in F_j$.  Therefore if $F_{ij} \subseteq F_{j}$ before $t$ is added to it then $F_{ij} \cup \{t\} \subseteq F_{j}$.
+{\bf Step case}.  A term $t$ is added to $F_{ij}$ when the previous utterance $stmt = initial(t)$.  From Lemma~\ref{lem:initial} we know that in this case $t \in F_j$.  Therefore if $F_{ij} \subseteq F_{j}$ before $t$ is added to it then $F_{ij} \cup \{t\} \subseteq F_{j}$.
 
 \end{proof}
 \begin{theorem}
 \label{thm:Ycorrect}
-Given two dialogue participants $i$ and $j$, $Y_{ij} \subseteq G_j$.  That is $i$'s model of $j$'s beliefs is a subset of the terms in $j$'s DAG.
+Given two dialogue participants $i$ and $j$ where $\deduction{F_j}{R_j}{{\cal T}_j}$ is $j$'s deduction and $Y_{ij}$ is $i$'s opponent belief set, then all terms $t \in Y_{ij}$ are provable in some $T \in {\cal T}_j$.  That is $i$'s model of $j$'s beliefs is a subset of the provable terms in $j$'s deduction.
 \end{theorem}
 \begin{proof}
 We will argue by induction considering each time something is added to $Y_{ij}$.
 
-{\bf base case}.  There are two possible initial states of $Y_{ij}$ either $Y_{ij} = \{t\}$ where $t$ is a term that appears in $G_j$ but not in $G_i$.  In this case, since $t \in G_j$ then $\{t\} \subseteq G_j$.  Otherwise $Y_{ij} = \emptyset$ and so $Y_{ij} \subseteq G_j$
+{\bf Base case}.  There are two possible initial states of $Y_{ij}$ given initial deductions $\deduction{F_i}{R_i}{\{T_i\}}$ and $\deduction{F_j}{R_j}{\{T_j\}}$ for the two players.  Either $Y_{ij} = \{t\}$ where $t$ is a term that is provable in $T_j$ but not in $T_i$.  In this case, since $t$ is provable $T_j$ we are done.  Otherwise $Y_{ij} = \emptyset$ and so there are no terms in $Y_{ij}$ and we are also done.
 
-{\bf step case}.  A term $t$ is added to $Y_{ij}$ following a statment $s$ when:
+{\bf Step case}.  A term $t$ is added to $Y_{ij}$ following a statment $s$ when:
 \begin{enumerate}
-\item  $s = initial(t)$.  From Lemma~\ref{lem:initial} we know that in this case $t \in G_j$.  Therefore if $Y_{ij} \subseteq G_{j}$ before $t$ is added to it then $Y_{ij} \cup \{t\} \subseteq G_{j}$.
-\item $s = \drule{l}{a}{r}$ and $t$ is a positive literal in $a$.  From Lemma~\ref{lem:drule} we know that $pos(a) \subseteq G_{j}$ therefore if $Y_{ij} \subseteq G_{j}$ then $Y_{ij} \cup pos(a) \subseteq G_{j}$.
-\item $s = whynot(t)$.  From Lemma~\ref{lem:whynot} we  know that in this case $t \in G_j$.  Therefore if $Y_{ij} \subseteq G_{j}$ before $t$ is added to it then $Y_{ij} \cup \{t\} \subseteq G_{j}$.
+\item  $s = initial(t)$.  From Lemma~\ref{lem:initial} we know that  $t$ is provable in some $T \in {\cal T}_j$.  
+\item $s = \drule{l}{a}{r}$ and $t$ is a positive literal in $a$.  From Lemma~\ref{lem:drule} we know that all terms in $pos(a)$ are provable in  some $T \in {\cal T}_j$.
+\item $s = whynot(t)$.  From Lemma~\ref{lem:whynot} we  know that in this case $t$ is provable in some $T \in {\cal T}_j$.  
 \end{enumerate}
 \end{proof}
+{\bf Corollary} \emph{If the current state of a dialogue is $\langle S^1_{stmt}, S^2_{stmt}, why(t), i\rangle$ and $\deduction{F_i}{R_i}{{\cal T}_i}$ is $i$'s deduction then $t$ is provable in some $T \in {\cal T}_i$.}  This follows because $j$ can only ask $why(t)$ if either a) it is the initial state of the dialogue in which case $t$ is the root term of the only deduction tree in ${\cal T}_i$ by definition of initial player state or b) $t \in Y_{ji}$ where $Y_{j}$ is $j$'s opponent belief set and we now know that all terms in $Y_{ji}$ are provable in some $T \in {\cal T}_i$  or c) in response to $whynot(t)$ which can only be asked if $t$ is provable in some $T \in {\cal T}_i$.
 
-{\bf Corollary} \emph{If the current state of a dialogue is $\langle S^1_{stmt}, S^2_{stmt}, why(t), i\rangle$ then $t \in G_i$.}  This follows because $j$ can only ask $why(t)$ if either a) $t \in Y_ij\backslash G_i$ and we now know that $Y_{ij} \subseteq G_j$ or b) in response to $whynot(t)$ which can only be asked if $t \in G_i \cup N_{ij}$.
+{\bf Corollary 2} \emph{If the current state of a dialogue is $\langle S^1_{stmt}, S^2_{stmt}, why(t), i\rangle$ then $S^i_{stmt} \neq \epsilon$ -- i.e., the error state never arises in response to a why question}. This follows directly from the previous corollary since $t$ is provable in some proof tree $F_i$ and $R_i$.
 
 \begin{theorem}
 \label{thm:Ncorrect}
-Given two dialogue participants $i$ and $j$, $N_{ij} \cap G_j = 
-\emptyset$.  That is $i$'s model of things $j$ doesn't believe doesn't contain anything in $j$'s DAG
+Given two dialogue participants $i$ and $j$, where $\deduction{F_j}{R_j}{{\cal T}_j}$ is $j$'s deduction and $N_{ij}$ is $i$'s opponent disbelief set, then all terms $t \in N_{ij}$ are unprovable in some proof tree $T \in {\cal T}_j$.
+%% for $F_j$ and $R_j$ in which any term in $N_{ij}$ is provable and there exists $T \in {\cal T}_j$ where $T$ is unprovable.  That is $i$'s model of things $j$ doesn't believe doesn't contain anything in any proof tree $j$ could construct.
 \end{theorem}
 \begin{proof}
 We will argue by induction considering each time something is added to $N_{ij}$.
 
-{\bf base case}.  There are two possible initial states of $N_{ij}$ either $N_{ij} = \{t\}$ where $t$ is a term that appears in $G_i$ but not in $G_j$.  In this case, since $t \not\in G_j$ then $\{t\} \cap G_j = \emptyset$.  Otherwise $N_{ij} = \emptyset$ and so $N_{ij} \subseteq G_j$
+{\bf Base case}.  There are two possible initial states of $N_{ij}$ given initial deductions $\deduction{F_i}{R_i}{\{T_i\}}$ and $\deduction{F_j}{R_j}{\{T_j\}}$ for the two players.  Either $N_{ij} = \{t\}$ where $t$ is a term that is provable in $T_i$ and unprovable $T_j$ and we are done.  Otherwise $N_{ij} = \emptyset$.
 
-{\bf step case}.  A term $t$ is added to $N_{ij}$ following a statement $s$ when:
+{\bf Step case}.  A term $t$ is added to $N_{ij}$ following a statement $s$ by $j$ when:
 \begin{enumerate}
-\item $s = \drule{l}{a}{r}$ and $t$ is a negative literal in $a$.  From Lemma~\ref{lem:drule} we know that $neg(a) \cap G_{j} = \emptyset$ therefore if $N_{ij} \cap G_{j} = \emptyset$ then $N_{ij} \cup neg(a) \cap G_{j} = \emptyset$.
-\item $s = why(t)$.  From Lemma~\ref{lem:why} we  know that in this case $t \not\in G_j$.  Therefore if $N_{ij} \cap G_{j} = \emptyset$ before $t$ is added to it then $(N_{ij} \cup \{t\}) \cap G_{j} = \emptyset$.
+\item $s = \drule{l}{a}{r}$ and $t \in neg(a)$.  From Lemma~\ref{lem:drule} we know that all terms in $neg(a)$ are unprovable in some $T \in {\cal T}_j$.  
+\item $s = why(t)$.  There are three occasions where $j$ can ask $why(t)$.  If $j$ has initiated the dialogue then ${\cal T}_j = \{\pt{\node{t}{unprovable}}{\emptyset}$ so $t$ is unprovable in the only tree in ${\cal T}_j$.  Secondly it is uttered in response to $whynot(t)$ asked by $i$ in this case $t$ was already in $N_{ij}$ and so is not added to the set, so we can ignore this case.  The last case is when $t \in Y_{ji}$ where $Y_{ji}$ is $j$'s opponent belief set and there exists a $T \in {\cal T}_j$ such that $t$ is unprovable in $T$.
 \end{enumerate}
 \end{proof}
-{\bf Corollary} \emph{If the current state of a dialogue is $\langle S^1_{stmt}, S^2_{stmt}, whynot(t), i\rangle$ then $t \not\in G_i$.}  This follows because $j$ can only ask $whynot(t)$ $t \in G_j \cap N_{ji}$ and we now know that $N_{ji} \cap G_i = \emptyset$.
+
+{\bf Corollary} \emph{If the current state of a dialogue is $\langle S^1_{stmt}, S^2_{stmt}, whynot(t), i\rangle$ and $\deduction{F_i}{R_i}{{\cal T}_i}$ is $i$'s deduction then there is no proof tree for $F_i$ and $R_i$ in which $t$ is provable.}  This follows because $j$ can only ask $whynot(t)$ if $t \in N_{ji}$ so there is some proof tree for $F_i$ and $R_i$ in which $t$ is unprovable.  From this it follows that there is no proof tree for $F_i$ and $R_i$ in which $t$ is provable for any $t \in N_{ji}$ by Theorem~\ref{thm:unprovable}.
+
+{\bf Corollary 2} \emph{If the current state of a dialogue is $\langle S^1_{stmt}, S^2_{stmt}, whynot(t), i\rangle$ then $S^i_{stmt} \neq \epsilon$ -- i.e., the error state never arrises in response to a why not question.} This follows directly from the previous corollary $t$ is not provable in any proof tree $F_i$ and $R_i$.
+
+{\bf Corollary 3} \emph{If the current state of a dialogue is $\langle S^1_{stmt}, S^2_{stmt}, why(t), i\rangle$ and $\deduction{F_j}{R_j}{{\cal T}_j}$ is $j$'s deduction then $t$ is not provable in any proof tree for $F_j$ and $R_j$.}  This follows because $j$ can only ask $why(t)$ if either $i$ asked $whynot(i)$ in which case this is true from our first corollary or if there is a $T \in {\cal T}_j$ in which $t$ in unprovable in which case  there is no proof tree for $F_j$ and $R_j$ in which $t$ is provable by Theorem~\ref{thm:unprovable}.
 
 \begin{theorem}
-Given two dialogue participants $i$ and $j$, $R_{ij} \subseteq R_j$.  That is $i$'s model of $j$'s rules is a subset  $j$'s rules.
-\end{theorem}
+Given two dialogue participants $i$ and $j$, where $\deduction{F_j}{R_j}{{\cal T}_j}$ is $j$'s deduction and $YR_{ij}$ is $i$'s opponent rule set, then $\forall l. l \in R_{ij} \implies \exists a, c. \: \drule{l}{a}{c} \in R_j$ \end{theorem}
 \begin{proof}
-We will argue by induction considering each time something is added to $R_{ij}$.
+We will argue by induction considering each time something is added to $YR_{ij}$.
 
-{\bf base case}.  In the initial state of the dialogue $R_{ij} = \emptyset$ therefore $R_{ij} \subseteq R_j$.
+{\bf Base case}.  In the initial state of the dialogue $YR_{ij} = \emptyset$ and the theorem is trivially true.
 
 
-{\bf step case}.  A rule label $l$ is added to $R_{ij}$ when the previous statement is $\drule{l}{a}{r}$ .  From Lemma~\ref{lem:drule} we know that $l \in R_j $ therefore if $R_{ij} \subseteq R_{j}$ then $R_{ij} \cup \{l\} \subseteq R_{j}$.
+{\bf Step case}.  A rule label $l$ is added to $YR_{ij}$ when the previous statement is $\drule{l}{a}{r}$ .  From Lemma~\ref{lem:drule} we know that there is at least one proof tree, $T \in {\cal T}_j$ such that $\node{t}{l}$ is a node in $T_j$.  Since $T$ is a proof tree for $F_j$ and $R_j$ there exists a rule  $\drule{l}{a}{c} \in R_j$ by Theorem~\ref{thm:rules}.
 \end{proof}
 
 
 
-\paragraph{Dialogues terminate} Then we need to show that if $P_i \neq P_j$ then eventually the dialogue will terminate.  That's going to be tricky.  I thought initially we could say that after every move one of the sets $F_{ij}$, $Y_{ij}$, $N_{ij}$ or $R_{ij}$ will get bigger but I think there is an edge case where a player says $\drule{l}{a}{c}$ where the other player already knows they know $l$ and already knows they know all the things in $a$ -- it's just they haven't yet explicitly established they used that rule with those particular facts to deduce something.  It may be that we can establish that for any term $t$ appearing in a node in either player's graph -- each player can only ask $whynot(t)$ or be asked $why(t)$ or say $initial(t)$ or $\drule{l}{a}{t}$ once and so, since the graphs are finite the dialogue eventually must terminate.  
+\subsection{Dialogues terminate} 
+\begin{theorem}Given two initial deductions $D_1 = \deduction{F_1}{R_1}{\{T_1\}}$ and $D_2 = \deduction{F_2}{R_2}{\{T_2\}}$.  If there are only a finite number of terms that are provable in some proof tree for $F_i$ and $R_i$, then  any dialogue $D$ starting from $D_1$ and $D_2$ is finite.
+\end{theorem}
+\begin{proof}
+We observe that the only statements in $D$ that do not terminate the dialogue are $initial(t)$, $\drule{l}{a}{c}$, $why(t)$ and $whynot(t)$.  $inital(t)$, $\drule{l}{a}{c}$ and $whynot(t)$ can only be made in response to the statement $why(t)$.  So it suffices to show that there are only a finite number of terms $t$ about which the statement $why(t)$ can appear in a dialogue and $why(t)$ can only be asked a finite number of times about each of these.  
 
+Since we assume that there are only a finite number of terms provable in a proof tree for $F_1$ and $R_1$ and only a finite number of terms provable in some proof tree for $F_2$ and $R_2$ and we know that $why(t)$ is only asked if $t$ is provable in some proof three for either  $F_1$ and $R_1$  or  $F_2$ and $R_2$ then there are only a finite number of terms $t$ about which $why(t)$ is asked.
 
-\paragraph{When dialogues terminate, a difference is detected} Then we have to show that it terminates by someone saying $\mathit{different\_fact}(t, i, j)$ or $\mathit{different\_rule}(l, i, j)$ not just because the dialogue has run out of legal moves.  I suspect this will involve showing that if no legal moves remain except those two then $F_{ij} = F_j$ and $R_{ij} = R_{j}$ (i.e., player $i$ now knows all of player $j$'s initial facts and rules) and so if the two players are not equal player $i$ must be able to make a terminating statement.
+If the preceding statement is not $whynot(t)$ then $why(t)$ can only be asked if it has not been asked before, therefore we are only concerned with statements $why(t)$ that following statements $whynot(t)$.  However $whynot(t)$ may only be asked once in a dialogue and so $why(t)$ can only respond to this once, even if $why(t)$ has been asked before.  Therefore the dialogue terminates (either with a terminating statement or because no legal move can be made).
+\end{proof}
+
+Note this means that only some dialogues terminate and this depends on the structure of the facts and rules for each player.  However we know that many sets of facts and rules have this property.  
+
+\subsection{When dialogues terminate, a difference is detected} 
+Now we have to show that a dialogue terminates by someone saying $\mathit{different\_fact}(t, i, j)$ or $\mathit{different\_rule}(l, i, j)$ not just because the dialogue has run out of legal moves. 
 
 \begin{theorem}
-If the $k$th state in a legal sequence of dialogue states is $\langle S^1_{k}, S^2_{k}, s, i \rangle$ and $s \neq  \mathit{different\_fact}(t, i, j),  \mathit{different\_fact}(t, j, i)$ nor $\mathit{different\_rule}(l, i, j)$ then there is a legal next dialogue state.
+If the $k$th state in a legal sequence of dialogue states is $\langle S^1_{k}, S^2_{k}, s, i \rangle$ and $s \neq  \mathit{different\_fact}(t, i, j)$, $s \neq \mathit{different\_fact}(t, j, i)$ and $s \neq \mathit{different\_rule}(l, i, j)$ then there is a legal next dialogue state.
 \end{theorem}
 \begin{proof}
 
-First we establish that in all dialogue states one of the following must hold:
+Recall that $S^i_k = \langle \deduction{F_i}{R_i}{{\cal T}_i}, Y_{ij}, F_{ij}, N_{ij}, YR_{ij} \rangle$
+
+We establish that in all legal dialogue states one of the following must hold:
 \begin{enumerate}
-\item $G_i \cup N_{ij} \neq \emptyset$
-\item $Y_{ij} \backslash G_i \neq \emptyset$ 
-\item $F_{ij} \neq F_i$
-\item $N_{ij} \cap G_i \neq \emptyset$
-\item $YR_{ij} \cap R_i \neq \emptyset$.
+\item There exists $t \in N_{ij}$ that is provable in some proof tree, $T \in {\cal T}_i$ and $whynot(t)$ has not previously been asked.
+\item There exists a $t \in Y_{ij}$ which is unprovable in some proof tree, $T \in {\cal T}_i$ and $why(t)$ has not previously been asked.
+\item There exists a $t \in F_{ij}$ and $t \not\in F_i$
+\item There exists some $l \in YR_{ij}$ such that there is no rule $\drule{l}{a}{c} \in R_i$.
 \end{enumerate}
+We observe that if at least one of the above holds then there is a legal next move.
 
 We consider a proof by cases
 
 \begin{enumerate}
-\item {\bf dialogue start.} In this case $Y_{12} = \{t\}$ and $N_{21} = \{t\}$ for some $t \in G_2$ and $t \not\in G_1$ (or vice versa).  So either 1 or 2 above is true.
-\item $s = initial(t)$.  This can only be uttered in response to $why(t)$ so we know that $t \in F_j$ and $t \in G_j$ ($j$ believes $t$) and that $t \in Y_{ij}\backslash G_i$ (since $i$ asked $why(t)$).  Since $t \not\in G_i$ then $t \not\in F_i$ therefore after updating its state $F_{ij} \neq F_i$.
-\item $s = \drule{l}{a}{t}$.  This can only be uttered in response to $why(t)$ so we know that  $t \in G_j$ ($j$ believes $t$) and that $t \in Y_{ij}\backslash G_i$ (since $i$ asked $why(t)$).  Since $t \not\in G_i$ then there is no rule that would allow $i$ to deduce $t$ so either $l \not\in R_i$ and $YR_{ij} \cap R_i \neq \emptyset$ becomes true.  Or $pos(a) \not\subseteq G_i$ or $neg(a) \cap G_i \neq \emptyset$ (there is some difference in the antecedants).  If $pos(a) \not\subseteq G_i$ then after adding $pos(a)$ to $Y_{ij}$ we will have $Y_{ij} \backslash G_I \neq \emptyset$.  If $neg(a) \cap G_i \neq \emptyset$ then after adding $neg(a)$ to $N_{ij}$ then $N_{ij} \cap G_i \neq \emptyset$.
-\louiseinline{neaten up}
-\item $s = why(t)$.  In this case $t \in Y_{ji} \backslash G_j$ and is added to $N_{ij}$. Since $Y_{ji} \subseteq G_i$ (see theorem above) $N_{ij} \cap G_i \neq \emptyset$
-\item $s = whynot(t)$.  In this case $t \in G_j \cup N_{ji}$ and is added to $Y_{ij}$. Since $N_{ji} \cap G_i = \emptyset$ (see theorem above) $Y_{ij} \backslash G_i \neq \emptyset$
-\louiseinline{neaten up}
+\item {\bf Dialogue start.} In this case $Y_{12} = \{t\}$ and $N_{21} = \{t\}$ for some $t$ provable $T_2$ and unprovable in $T_1$ (or vice versa).  So either 1 or 2 above is true.
+
+\item $s = initial(t)$.  This means $t \in F_j$ (for this to be legal utterance).  It can only be uttered in response to $why(t)$ said by $i$ so we also know that $t$ is provable in some $T \in {\cal T}_j$ ($j$ believes $t$) (corollary to theorem~\ref{thm:Ycorrect} ) and that $t$ is not provable in any proof tree for $F_i$ and $R_i$ (corollary 3 to theorem~\ref{thm:Ycorrect}).  Since $t$ is not provable  in any proof tree for $F_i$ and $R_i$  then $t \not\in F_i$ (otherwise $\pt{\{\node{t}{initial}\}}{\emptyset}$ would be a proof tree for $F_i$ and $R_i$) therefore after updating its state by adding $t$ to $F_{ij}$ there exists a $t \in F_{ij}$ and $t \not\in F_i$.
+
+\item $s = \drule{l}{a}{t}$.  This can only be uttered in response to $why(t)$ so we know that  $t$ is provable in some $T \in {\cal T}_j$ and that $t$ is not provable in any proof tree for $F_i$ and $R_i$.  Since $t$ is not provable in any proof tree for $F_i$ and $R_i$ then there is no rule that would allow $i$ to deduce $t$ so either $\drule{l}{a}{t} \not\in R_i$ and after $l$ is added to $YR_{ij}$ our fifth property holds.  Or there is some term $t \in pos(a)$ where $t$ is not provable in any proof tree for $F_i$ and $R_i$ or some term  $t \in neg(a)$ which is provable in some proof tree for $F_i$ and $R_i$ (there is some difference in the antecedants).  
+
+If there is some term $t \in pos(a)$ where $t$ is not provable in some proof tree for $F_i$ and $R_i$ then after adding $pos(a)$ to $Y_{ij}$ there exists a $t \in Y_{ij}$ which is provable in no proof tree for $F_j$ and $R_j$.
+ 
+ If  there is a $t \in neg(a)$ which is provable in some proof tree for $F_i$ and $R_i$ then after adding $neg(a)$ to $N_{ij}$ there exists $t \in N_{ij}$ that is the root of a proof tree for $F_j$ and $R_j$ and is provable in that tree.
+ 
+\item $s = why(t)$.  In this case $t \in Y_{ji}$, $t$ is unprovable in some $T \in {\cal T}_j$ and $t$ is added to $N_{ij}$. Since all terms in $Y_{ji}$ are provable in some $T \in {\cal T}_i$ (Theorem~\ref{thm:Ycorrect}) there exists $t \in N_{ij}$ that is provable in some proof tree for $F_j$ and $R_j$.
+
+\item $s = whynot(t)$.  In this case $t \in N_{ji}$, $t$ is provable in some $T \in {\cal T}_j$, and $t$ is added to $Y_{ij}$. Since every term in $N_{ji}$ is unprovable in some $T \in {\cal T}_j$ (Theorem~\ref{thm:Ncorrect}), there exists a $t \in Y_{ij}$ which is provable in no proof tree for $F_j$ and $R_j$ (by Theorem~\ref{thm:unprovable}).
 \end{enumerate}
-\louiseinline{This may be proof by cases rather than induction.  I don't seem to be using the fact that the property held in the previous state}
-
-We note that if $s = why(t)$ or $s = whynot(t)$ then a legal next move is always possible.  This follows from the corrollaries to theorems~\ref{thm:Ycorrect} and \ref{thm:Ncorrect}.
-
 \end{proof}
 
-\louiseinline{This might be a lemma}
-
-
+\begin{sloppypar}
 \begin{theorem}
-If a dialogue terminates the last statement is: $s \neq \mathit{different\_fact}(t, i, j)$ or $s \neq \mathit{different\_fact}(t, j, i)$ or $s \neq \mathit{different\_rule(l, i, j)}$
+If a dialogue terminates the last statement is: $\mathit{different\_fact}(t, i, j)$ or $\mathit{different\_fact}(t, j, i)$ or $\mathit{different\_rule(l, i, j)}$
 \end{theorem}
-\louiseinline{Think this is a straightforward corollary of the above}
-
-\begin{theorem}
-Dialogues terminate.
-\end{theorem}
-\begin{proof}
-We observe that DAG's are finite.\louiseinline{Might need to prove this}  In particular this means that there are a finite number of terms, $t$, appearing in the two DAGs.   Non-terminating statements that can be made in a dialogue all concern some term, $t$, that appears in the DAG of one of the participants, namely: $initial(t)$, $\drule{l}{a}{t}$, $why(t)$ and $whynot(t)$.  Since statements may not be repeated and the set of possible terms is finite, eventually the dialogue must terminate.
+\end{sloppypar}
+\begin{proof}This follows because we have shown that there is always a legal next move except in these cases.
 \end{proof}
-
 
 \bibliography{bluebook}
 \bibliographystyle{apalike}
