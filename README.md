@@ -9,3 +9,4 @@ Index:
 2. Trying to Use the Compositional Framework
 3. Explanations for Forward-Chaining Rules-Based Systems (to be implemented in Prolog)
 4. Examples of Action Failure
+5. A Dialogue System for identifying Disagreements in Deductive Reasoning
